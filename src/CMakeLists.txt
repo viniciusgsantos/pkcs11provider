@@ -1,0 +1,13 @@
+set(SRC_FILES
+	${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_attr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_errors.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_helper.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_provider.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_ec_keymgmt.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_ec_sig.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_rsa_keymgmt.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_rsa_sig.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_core_functions.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_store.c
+    PARENT_SCOPE
+)
