@@ -427,6 +427,38 @@ static int pkcs11_ec_keymgmt_has(const void *keydata, int selection)
 	return TRUE;
 }
 
+int pkcs11_ec_keymgmt_match(const void *keydata1, const void *keydata2, int selection)
+{
+	PKCS11_EC_KEYDATA *key1 = (PKCS11_EC_KEYDATA *) keydata1;
+	PKCS11_EC_KEYDATA *key2 = (PKCS11_EC_KEYDATA *) keydata2;
+
+	if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
+		if (BN_cmp(key1->priv, key2->priv) != 0) {
+			return FALSE;
+		}
+	}
+
+	if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
+		if (BN_cmp(key1->pub_x, key2->pub_x) != 0 || BN_cmp(key1->pub_y, key2->pub_y) != 0) {
+			return FALSE;
+		}
+	}
+
+	if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
+		if (strcmp(key1->curve_name, key2->curve_name) != 0) {
+			return FALSE;
+		}
+	}
+	
+	if (selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) {
+		if (strcmp(key1->label, key2->label) != 0) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
 static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PARAM *params)
 {
 	PKCS11_EC_KEYDATA *key = (PKCS11_EC_KEYDATA *) keydata;

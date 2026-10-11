@@ -39,10 +39,12 @@ static OSSL_FUNC_keymgmt_gen_fn pkcs11_ec_keymgmt_gen;
 static OSSL_FUNC_keymgmt_gen_cleanup_fn pkcs11_ec_keymgmt_gen_cleanup;
 static OSSL_FUNC_keymgmt_load_fn pkcs11_ec_keymgmt_load;
 static OSSL_FUNC_keymgmt_has_fn pkcs11_ec_keymgmt_has;
+static OSSL_FUNC_keymgmt_match_fn pkcs11_ec_keymgmt_match;
 static OSSL_FUNC_keymgmt_import_fn pkcs11_ec_keymgmt_import;
 static OSSL_FUNC_keymgmt_import_types_fn pkcs11_ec_keymgmt_import_types;
 static OSSL_FUNC_keymgmt_export_fn pkcs11_ec_keymgmt_export;
 static OSSL_FUNC_keymgmt_export_types_fn pkcs11_ec_keymgmt_export_types;
+
 
 const extern OSSL_DISPATCH pkcs11_ec_keymgmt_fns[14];
 

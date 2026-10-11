@@ -459,6 +459,35 @@ static int pkcs11_rsa_keymgmt_has(const void *keydata, int selection)
 	return TRUE;
 }
 
+int pkcs11_rsa_keymgmt_match(const void *keydata1, const void *keydata2, int selection)
+{
+	PKCS11_RSA_KEYDATA *key1 = (PKCS11_RSA_KEYDATA *) keydata1;
+	PKCS11_RSA_KEYDATA *key2 = (PKCS11_RSA_KEYDATA *) keydata2;
+
+	if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
+		if (BN_cmp(key1->d, key2->d) != 0 || BN_cmp(key1->p, key2->p) != 0 || BN_cmp(key1->q, key2->q) != 0 ||
+			BN_cmp(key1->dmp1, key2->dmq1) != 0 || BN_cmp(key1->dmp1, key2->dmq1) != 0 ||
+			BN_cmp(key1->iqmp, key2->iqmp) != 0) {
+			return FALSE;
+		}
+	}
+
+	if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
+		if (BN_cmp(key1->n, key2->n) != 0 || BN_cmp(key1->e, key2->e) != 0) {
+			return FALSE;
+		}
+	}
+	
+	if (selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) {
+		if (strcmp(key1->label, key2->label) != 0) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+
 static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PARAM *params)
 {
 
