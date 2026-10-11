@@ -38,7 +38,7 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, const c
 		if (pkcs11_init_args == NULL) {
 			ctx->pkcs11_init_args = NULL;
 		} else {
-			ctx->module_path = OPENSSL_zalloc(strlen(pkcs11_init_args) + 1);
+			ctx->pkcs11_init_args = OPENSSL_zalloc(strlen(pkcs11_init_args) + 1);
 			strcpy(ctx->pkcs11_init_args, pkcs11_init_args);
 		}
 	} else {
