@@ -3,32 +3,40 @@ project (pkcs11provider)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 
-add_subdirectory(src)
-include_directories(include)
-
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -z defs")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -z defs")
+find_package(OpenSSL 3.0.0 REQUIRED)
 
 set(PROJECT_SOVERSION "0")
 set(PROJECT_VERSION "0.0.1")
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -z defs")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -z defs")
+
+add_subdirectory(src)
+include_directories(include)
+
 add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
-set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION ${PROJECT_SOVERSION})
-set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
-# Don't change or remove it. For total compatibility the OpenSSL standard, we must use C99.
-set_target_properties(${PROJECT_NAME} PROPERTIES
+
+set_target_properties(${PROJECT_NAME} PROPERTIES 
+    SOVERSION ${PROJECT_SOVERSION}
+    VERSION ${PROJECT_VERSION}
     C_STANDARD 99
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS OFF
 )
 
-install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
-    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
-
-find_package(OpenSSL 3.0.0 REQUIRED)
-
 target_link_libraries (${PROJECT_NAME}
-    OpenSSL::SSL
-    ${CMAKE_DL_LIBS}
+    PRIVATE
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        ${CMAKE_DL_LIBS}
+)
+
+include(GNUInstallDirs)
+
+install(TARGETS ${PROJECT_NAME}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
