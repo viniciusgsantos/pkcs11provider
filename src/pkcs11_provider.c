@@ -9,20 +9,9 @@
 #include "pkcs11provider/pkcs11_store.h"
 #include "pkcs11provider/pkcs11_types.h"
 
-#include <malloc.h>
 #include <dlfcn.h>
-#include <string.h>
 #include <openssl/core.h>
-#include <openssl/store.h>
-#include <openssl/core_dispatch.h>
-#include <openssl/core_object.h>
-#include <openssl/core_names.h>
 #include <openssl/params.h>
-#include <openssl/evp.h>
-#include <openssl/x509.h>
-#include <openssl/err.h>
-#include <openssl/bn.h>
-#include <openssl/ec.h>
 
 static OSSL_FUNC_provider_query_operation_fn p_query;
 static OSSL_FUNC_provider_get_reason_strings_fn p_reasons;
