@@ -180,7 +180,7 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	int i = 0, j = 0;
 	pub_key_template[i++] = makeObjectClassAttribute(CKA_CLASS, CKO_PUBLIC_KEY);
 	pub_key_template[i++] = makeBooleanAttribute(CKA_TOKEN, CK_TRUE);
-	//pub_key_template[i++] = makeBooleanAttribute(CKA_PRIVATE, FALSE);
+	pub_key_template[i++] = makeBooleanAttribute(CKA_PRIVATE, FALSE);
 	pub_key_template[i++] = makeBooleanAttribute(CKA_MODIFIABLE, CK_TRUE);
 	pub_key_template[i++] = makeBooleanAttribute(CKA_ENCRYPT, CK_TRUE);
 	pub_key_template[i++] = makeBooleanAttribute(CKA_VERIFY, CK_TRUE);
