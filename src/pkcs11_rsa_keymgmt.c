@@ -235,18 +235,18 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 
 	int ret;
 	if ((ret = open_session(provctx, gctx->slot_id, &session_handle)) != 0) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(handle, ret);
 		goto err4;
 	}
 
 	if ((ret = user_login(provctx, gctx->pin)) != 0) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(handle, ret);
 		goto err3;
 	}
 
 	if ((ret = PKCS11_HELPER_gen_keypair(method, session_handle, &mechanism, pub_key_template, i,
 			priv_key_template, j, &pub_key_handle, &priv_key_handle)) != 0) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(handle, ret);
 		goto err3;
 	}
 
@@ -263,14 +263,14 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 	BIGNUM *iqmp = NULL;
 
 	if ((ret = PKCS11_HELPER_get_public_rsa_attributes(method, session_handle, pub_key_handle, &n, &e)) != 0) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(handle, ret);
 		goto err3;
 	}
 
 	if (gctx->extractable) {
 		if ((ret = PKCS11_HELPER_get_private_rsa_attributes(method, session_handle, priv_key_handle, &d, &p,
 				&q, &dmp1, &dmq1, &iqmp)) != 0) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(handle, ret);
 			goto err2;
 		};
 	}
