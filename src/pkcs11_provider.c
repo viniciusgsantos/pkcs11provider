@@ -8,6 +8,7 @@
 #include "pkcs11provider/pkcs11_rsa_sig.h"
 #include "pkcs11provider/pkcs11_store.h"
 #include "pkcs11provider/pkcs11_types.h"
+#include "pkcs11provider/session.h"
 
 #include <dlfcn.h>
 #include <openssl/core.h>
@@ -132,6 +133,7 @@ static void p_teardown(void *provctx)
 
 	PKCS11_PROV_CTX *ctx = (PKCS11_PROV_CTX *) provctx;
 
+	user_logout(ctx);
 
 	if (ctx->pkcs11_initialized) {
 		ctx->method->C_Finalize(NULL);

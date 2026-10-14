@@ -4,6 +4,7 @@
 #include "pkcs11provider/pkcs11_helper.h"
 #include "pkcs11provider/pkcs11_types.h"
 #include "pkcs11provider/pkcs11/pkcs11.h"
+#include "pkcs11provider/session.h"
 
 #include <openssl/core_names.h>
 #include <openssl/core_object.h>
@@ -29,12 +30,12 @@ static void *pkcs11_store_open(void *provctx, const char *uri)
 	}
 
 	CK_SESSION_HANDLE session_handle;
-	if ((ret = PKCS11_HELPER_open_session(method, loaderctx->slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(pctx, loaderctx->slot_id, &session_handle)) != 0) {
 		ERR_core_raise(pctx->core_handle, ret);
 		goto err1;
 	}
 
-	if((ret = PKCS11_HELPER_login(method, session_handle, loaderctx->pin)) != 0) {
+	if((ret = user_login(pctx, loaderctx->pin)) != 0) {
 		ERR_core_raise(pctx->core_handle, ret);
 		goto err0;
 	}
@@ -44,7 +45,7 @@ static void *pkcs11_store_open(void *provctx, const char *uri)
 	return loaderctx;
 
 err0:
-	PKCS11_HELPER_close_session(method, session_handle);
+	close_session(pctx, session_handle);
 err1:
 	OPENSSL_free(loaderctx);
 	OPENSSL_clear_free(loaderctx->pin, strlen(loaderctx->pin) + 1); loaderctx->pin = NULL;
@@ -81,7 +82,8 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 	OSSL_PASSPHRASE_CALLBACK *pw_cb, void *pw_cbarg)
 {
 	PKCS11_STOREMGMT_LOADER_CTX *lctx = (PKCS11_STOREMGMT_LOADER_CTX *) loaderctx;
-	CK_FUNCTION_LIST_PTR method = lctx->provctx->method;
+	PKCS11_PROV_CTX *provctx = lctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 	const OSSL_CORE_HANDLE *handle = lctx->provctx->core_handle;
 
 	CK_OBJECT_HANDLE *obj_handles = NULL;
@@ -234,7 +236,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 		memset(&key_reference, '\0', sizeof(PKCS11_KEY_REFERENCE));
 
 		CK_SESSION_HANDLE session_handle;
-		if ((ret = PKCS11_HELPER_open_session(method, lctx->slot_id, &session_handle)) != CKR_OK) {
+		if ((ret = open_session(provctx, lctx->slot_id, &session_handle)) != CKR_OK) {
 			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
@@ -292,8 +294,9 @@ static int pkcs11_store_eof(void *loaderctx)
 static int pkcs11_store_close(void *loaderctx)
 {
 	PKCS11_STOREMGMT_LOADER_CTX *lctx = (PKCS11_STOREMGMT_LOADER_CTX *) loaderctx;
+	
 	if (lctx) {
-		PKCS11_HELPER_close_session(lctx->provctx->method, lctx->session_handle);
+		close_session(lctx->provctx, lctx->session_handle);
 		if (lctx->pin)
 			OPENSSL_clear_free(lctx->pin, strlen(lctx->pin));
 		int i;

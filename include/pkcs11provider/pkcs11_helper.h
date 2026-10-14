@@ -135,16 +135,6 @@ static const EC_NAME2NID nist_curves[] = {
 
 int PKCS11_HELPER_initialize(CK_FUNCTION_LIST_PTR method, const char *init_args);
 
-int PKCS11_HELPER_open_session(CK_FUNCTION_LIST_PTR method, const CK_SLOT_ID slot_id,
-	CK_SESSION_HANDLE *session_handle);
-
-int PKCS11_HELPER_login(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle,
-							const char *user_pin);
-
-int PKCS11_HELPER_logout(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle);
-
-int PKCS11_HELPER_close_session(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle);
-
 static int PKCS11_HELPER_get_key_handle(CK_FUNCTION_LIST_PTR method, const CK_SESSION_HANDLE session_handle,
     const char *key_label, int isPrivate, CK_OBJECT_HANDLE *object);
 

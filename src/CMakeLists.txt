@@ -9,5 +9,6 @@ set(SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_rsa_sig.c
     ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_core_functions.c
     ${CMAKE_CURRENT_SOURCE_DIR}/pkcs11_store.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/session.c
     PARENT_SCOPE
 )

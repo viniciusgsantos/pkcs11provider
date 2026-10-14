@@ -14,6 +14,9 @@ struct pkcs11_prov_ctx_st {
 	int pkcs11_initialized;
 	char *module_path;
 	char *pkcs11_init_args;
+	CK_SESSION_HANDLE anchor_session;
+	int has_anchor_session;
+	int is_logged_in;
 	CK_FUNCTION_LIST_PTR method;
 	int verifyInHardware;
 };

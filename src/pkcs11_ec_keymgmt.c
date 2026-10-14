@@ -5,6 +5,7 @@
 #include "pkcs11provider/pkcs11_helper.h"
 #include "pkcs11provider/pkcs11_store.h"
 #include "pkcs11provider/pkcs11_types.h"
+#include "pkcs11provider/session.h"
 
 #include <openssl/bn.h>
 #include <openssl/core_names.h>
@@ -157,7 +158,8 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_gen_settable_params(void *genctx, voi
 static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 {
 	PKCS11_EC_KEYMGMT_GEN_CTX *gctx = (PKCS11_EC_KEYMGMT_GEN_CTX *) genctx;
-	CK_FUNCTION_LIST_PTR method = gctx->provctx->method;
+	PKCS11_PROV_CTX *provctx = gctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 	const OSSL_CORE_HANDLE *handle = gctx->provctx->core_handle;
 
 	CK_MECHANISM mechanism;
@@ -204,12 +206,12 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	CK_OBJECT_HANDLE priv_key_handle;
 	
 	int ret;
-	if ((ret = PKCS11_HELPER_open_session(method, gctx->slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(provctx, gctx->slot_id, &session_handle)) != 0) {
 		ERR_core_raise(handle, ret);
 		goto err4;
 	}
 
-	if((ret = PKCS11_HELPER_login(method, session_handle, gctx->pin)) != 0) {
+	if((ret = user_login(provctx, gctx->pin)) != 0) {
 		ERR_core_raise(handle, ret);
 		goto err3;
 	}
@@ -276,7 +278,7 @@ err2:
 	BN_free(pub_x);
 	BN_free(pub_y);
 err3:
-	PKCS11_HELPER_close_session(method, session_handle);
+	close_session(provctx, session_handle);
 err4:
 	free_attributes_data(pub_key_template, i);
 	free_attributes_data(priv_key_template, j);
@@ -303,7 +305,8 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 	PKCS11_KEY_REFERENCE *key_reference = (PKCS11_KEY_REFERENCE *) reference;
 
 	CK_FUNCTION_LIST_PTR method = key_reference->provctx->method;
-	const OSSL_CORE_HANDLE *handle = key_reference->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = key_reference->provctx;
+	const OSSL_CORE_HANDLE *handle = provctx->core_handle;
 
 	int ret;
 
@@ -391,7 +394,7 @@ err1:
 err2:
 	OPENSSL_free(keydata);
 err3:
-	PKCS11_HELPER_close_session(method, key_reference->session_handle);
+	close_session(provctx, key_reference->session_handle);
 err4:
 	return NULL;
 }
@@ -462,8 +465,9 @@ int pkcs11_ec_keymgmt_match(const void *keydata1, const void *keydata2, int sele
 static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PARAM *params)
 {
 	PKCS11_EC_KEYDATA *key = (PKCS11_EC_KEYDATA *) keydata;
-	CK_FUNCTION_LIST_PTR method = key->provctx->method;
-	const OSSL_CORE_HANDLE *handle = key->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = key->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
+	const OSSL_CORE_HANDLE *handle = provctx->core_handle;
 	
 	BIGNUM *pub_x = NULL;
 	BIGNUM *pub_y = NULL;
@@ -582,12 +586,12 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 
 	// We are logging in early to fail early in case of incorrect pin or slot id.
 	CK_SESSION_HANDLE session_handle;
-	if ((ret = PKCS11_HELPER_open_session(method, slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(provctx, slot_id, &session_handle)) != 0) {
 		ERR_core_raise(handle, ret);
 		goto err1;
 	}
 
-	if ((ret = PKCS11_HELPER_login(method, session_handle, pin)) != 0) {
+	if ((ret = user_login(provctx, pin)) != 0) {
 		ERR_core_raise(handle, ret);
 		goto err0;
 	}
@@ -771,7 +775,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	return TRUE;
 
 err0:
-	PKCS11_HELPER_close_session(method, session_handle);
+	close_session(provctx, session_handle);
 err1:
 	BN_free(pub_x);
 	BN_free(pub_y);

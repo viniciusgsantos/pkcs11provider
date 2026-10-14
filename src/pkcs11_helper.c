@@ -29,48 +29,6 @@ int PKCS11_HELPER_initialize(CK_FUNCTION_LIST_PTR method, const char *init_args)
 	return 0;
 }
 
-int PKCS11_HELPER_open_session(CK_FUNCTION_LIST_PTR method,
-		const CK_SLOT_ID slot_id, CK_SESSION_HANDLE *session_handle)
-{
-	CK_RV rv = method->C_OpenSession(slot_id, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, session_handle);
-
-	if (rv != CKR_OK)
-		return rv;
-
-	return 0;
-}
-
-// TODO implement a global login
-int PKCS11_HELPER_login(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle,
-		const char *user_pin)
-{
-	CK_RV rv = method->C_Login(session_handle, CKU_USER, (unsigned char *)user_pin, strlen(user_pin));
-	
-	if (rv != CKR_OK && rv != CKR_USER_ALREADY_LOGGED_IN)
-		return rv;
-	
-	return 0;
-}
-int PKCS11_HELPER_logout(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle)
-{
-	CK_RV rv = method->C_Logout(session_handle);
-
-	if(rv != CKR_OK)
-		return rv;
-
-	return 0;
-}
-
-int PKCS11_HELPER_close_session(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle)
-{
-	CK_RV rv = method->C_CloseSession(session_handle);
-
-	if(rv != CKR_OK)
-		return rv;
-
-	return 0;
-}
-
 static int PKCS11_HELPER_get_key_handle(CK_FUNCTION_LIST_PTR method,
 		const CK_SESSION_HANDLE session_handle,
 		const char *key_label, int isPrivate,
