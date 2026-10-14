@@ -189,6 +189,11 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	pub_key_template[i++] = makeCharArrayAttribute(CKA_ID, random_id, random_id_len);
 	pub_key_template[i++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
 
+	if (!check_attributes_data(pub_key_template, i)) {
+		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		goto err4;
+	}
+
 	priv_key_template[j++] = makeObjectClassAttribute(CKA_CLASS, CKO_PRIVATE_KEY);
 	priv_key_template[j++] = makeBooleanAttribute(CKA_TOKEN, CK_TRUE);
 	priv_key_template[j++] = makeBooleanAttribute(CKA_PRIVATE, CK_TRUE);
@@ -200,6 +205,11 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	priv_key_template[j++] = makeBooleanAttribute(CKA_EXTRACTABLE, gctx->extractable);
 	priv_key_template[j++] = makeCharArrayAttribute(CKA_ID, random_id, random_id_len);
 	priv_key_template[j++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
+
+	if (!check_attributes_data(priv_key_template, j)) {
+		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		goto err4;
+	}
 	
 	CK_SESSION_HANDLE session_handle;
 	CK_OBJECT_HANDLE pub_key_handle;

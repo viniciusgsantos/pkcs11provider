@@ -209,7 +209,7 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 
 	if (!check_attributes_data(pub_key_template, i)) {
 		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-		goto err0;
+		goto err4;
 	}
 
 	priv_key_template[j++] = makeObjectClassAttribute(CKA_CLASS, CKO_PRIVATE_KEY);
@@ -226,7 +226,7 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 
 	if (!check_attributes_data(priv_key_template, j)) {
 		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-		goto err0;
+		goto err4;
 	}
 	
 	CK_SESSION_HANDLE session_handle;
