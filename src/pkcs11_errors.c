@@ -4,6 +4,8 @@
 const OSSL_ITEM reasons[] = {
 	{PROVIDER_PKCS11_LOAD_MODULE_ERROR, "Unable to load PKCS#11 module"},
 	{PROVIDER_BAD_PKCS11_MODULE, "Bad PKCS#11 module"},
+	{PROVIDER_MISSING_PKCS11_MODULE_PATH, "Missing PKCS#11 module path"},
+	{PROVIDER_FAILED_TO_INITIALIZE_CRYPTOKI, "Failed to initialize Cryptoki"},
 	{ENGINE_METHOD_NOT_IMPLEMENTED, "Method not yet implemented"},
 	{UNKNOWN_MD_ALGORITHM, "Unknown message digest algorithm"},
 	{NO_MECHANISM_AVAILABLE, "No mechanism available for the given algorithm"},

@@ -2,16 +2,26 @@
 #define PKCS11_TYPES_H_
 
 #include "pkcs11provider/pkcs11/pkcs11.h"
-#include "pkcs11provider/pkcs11_types.h"
 
 #include <openssl/core.h>
-#include <openssl/evp.h>
-#include <openssl/bn.h>
+#include <openssl/core_dispatch.h>
+
+struct params_functions_st {
+	OSSL_FUNC_core_gettable_params_fn *core_gettable_params;
+	OSSL_FUNC_core_get_params_fn *core_get_params;
+};
+
+struct error_functions_st {
+	OSSL_FUNC_core_new_error_fn *core_new_error;
+	OSSL_FUNC_core_set_error_debug_fn *core_set_error_debug;
+	OSSL_FUNC_core_vset_error_fn *core_vset_error;
+};
 
 struct pkcs11_prov_ctx_st {
     const OSSL_CORE_HANDLE *core_handle;
+	struct params_functions_st *param_functions;
+	struct error_functions_st *error_functions;
 	void *module_handler;
-	int pkcs11_initialized;
 	char *module_path;
 	char *pkcs11_init_args;
 	CK_SESSION_HANDLE anchor_session;
@@ -29,6 +39,8 @@ struct pkcs11_prov_key_st {
 	int has_pub_key_handle;
 };
 
+typedef struct params_functions_st PARAMS_FUNCTIONS_ST;
+typedef struct error_functions_st ERROR_FUNCTIONS_ST;
 typedef struct pkcs11_prov_ctx_st PKCS11_PROV_CTX;
 typedef struct pkcs11_prov_key_st PKCS11_PROV_KEY;
 

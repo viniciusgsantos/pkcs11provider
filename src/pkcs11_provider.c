@@ -22,36 +22,60 @@ OSSL_provider_init_fn OSSL_provider_init;
 
 static void provider_ctx_free(PKCS11_PROV_CTX *ctx)
 {
-	OPENSSL_free(ctx);
+	if (ctx) {
+		OPENSSL_free(ctx->module_path);
+		OPENSSL_free(ctx->pkcs11_init_args);
+		OPENSSL_free(ctx->param_functions);
+		OPENSSL_free(ctx->error_functions);
+		OPENSSL_free(ctx);
+	}
 }
 
-static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, const char *pkcs11_module_path,
-	const char *pkcs11_init_args)
+static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_FUNCTIONS_ST *params_functions,
+	ERROR_FUNCTIONS_ST *error_functions, const char *pkcs11_module_path, const char *pkcs11_init_args)
 {
-	PKCS11_PROV_CTX *ctx;
+	PKCS11_PROV_CTX *ctx = OPENSSL_malloc(sizeof(PKCS11_PROV_CTX));
+	if (!ctx)
+		goto err0;
 
-	if ((ctx = OPENSSL_malloc(sizeof(PKCS11_PROV_CTX))) != NULL) {
-		ctx->core_handle = handle;
-		if (pkcs11_module_path == NULL)
-			goto err1;
-		ctx->module_path = OPENSSL_malloc(strlen(pkcs11_module_path) + 1);
-		strcpy(ctx->module_path, pkcs11_module_path);
-		if (pkcs11_init_args == NULL) {
-			ctx->pkcs11_init_args = NULL;
-		} else {
-			ctx->pkcs11_init_args = OPENSSL_malloc(strlen(pkcs11_init_args) + 1);
-			strcpy(ctx->pkcs11_init_args, pkcs11_init_args);
-		}
+	ctx->core_handle = handle;
+	ctx->param_functions = params_functions;
+	ctx->error_functions = error_functions;
+
+	ctx->module_handler = NULL;
+
+	ctx->module_path = NULL;
+	ctx->pkcs11_init_args = NULL;
+
+	ctx->has_anchor_session = 0;
+	ctx->is_logged_in = 0;
+
+	if (pkcs11_module_path == NULL) {
+		ERR_core_raise(handle, PROVIDER_MISSING_PKCS11_MODULE_PATH);
+		goto err0;
+	}
+	
+	ctx->module_path = OPENSSL_malloc(strlen(pkcs11_module_path) + 1);
+	if (!ctx->module_path) {
+		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		goto err0;
+	}
+	strcpy(ctx->module_path, pkcs11_module_path);
+	
+	if (pkcs11_init_args == NULL) {
+		ctx->pkcs11_init_args = NULL;
 	} else {
-		goto err1;
+		ctx->pkcs11_init_args = OPENSSL_malloc(strlen(pkcs11_init_args) + 1);
+		if (!ctx->pkcs11_init_args) {
+			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			goto err0;
+		}
+		strcpy(ctx->pkcs11_init_args, pkcs11_init_args);
 	}
 
-	int ret;
-
-	CK_RV rv;
 	if ((ctx->module_handler = dlopen(ctx->module_path, RTLD_NOW)) == NULL) {
 		ERR_core_raise(handle, PROVIDER_PKCS11_LOAD_MODULE_ERROR);
-		goto err1;
+		goto err0;
 	}
 
 	CK_RV (*f_ptr)(CK_FUNCTION_LIST_PTR_PTR);
@@ -61,32 +85,29 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, const c
 		goto err0;
 	}
 
-	rv = f_ptr(&ctx->method);
+	CK_RV rv = f_ptr(&ctx->method);
 	if (rv != CKR_OK) {
 		ERR_core_raise(handle, rv);
 		goto err0;
 	}
 
-	ret = PKCS11_HELPER_initialize(ctx->method, ctx->pkcs11_init_args);
+	int ret = PKCS11_HELPER_initialize(ctx->method, ctx->pkcs11_init_args);
 
 	if (ret != 0) {
-		ctx->pkcs11_initialized = FALSE;
-		dlclose(ctx->module_handler);
-		ctx->module_handler = NULL;
-		return NULL;
-	} else {
-		ctx->pkcs11_initialized = TRUE;
+		ERR_core_raise(handle, PROVIDER_FAILED_TO_INITIALIZE_CRYPTOKI);
+		goto err0;
 	}
 
 	return ctx;
 
 err0:
-	dlclose(ctx->module_handler);
-	ctx->module_handler = NULL;
-	ERR_core_raise(handle, ret);
-err1:
+	if (ctx) {
+		if (ctx->module_handler) dlclose(ctx->module_handler);
+		OPENSSL_free(ctx->module_path);
+		OPENSSL_free(ctx->pkcs11_init_args);
+		OPENSSL_free(ctx);
+	}
 	return NULL;
-
 }
 
 static const OSSL_ALGORITHM signature_algorithms[] = {
@@ -134,29 +155,8 @@ static void p_teardown(void *provctx)
 	PKCS11_PROV_CTX *ctx = (PKCS11_PROV_CTX *) provctx;
 
 	user_logout(ctx);
-
-	if (ctx->pkcs11_initialized) {
-		ctx->method->C_Finalize(NULL);
-		ctx->pkcs11_initialized = FALSE;
-	}
-
-	if (ctx->module_handler) {
-		dlclose(ctx->module_handler);
-		ctx->module_handler = NULL;
-		ctx->method = NULL;
-	}
-
-	if (ctx->module_path) {
-		OPENSSL_free(ctx->module_path);
-		ctx->module_path = NULL;
-	}
-
-	if (ctx->pkcs11_init_args) {
-		OPENSSL_free(ctx->pkcs11_init_args);
-		ctx->pkcs11_init_args = NULL;
-	}
-
-	free(ctx);
+	ctx->method->C_Finalize(NULL);
+	dlclose(ctx->module_handler);
 }
 
 static const OSSL_DISPATCH prov_fns[] = {
@@ -200,6 +200,12 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *core_handle,
 		}
 	}
 
+	PARAMS_FUNCTIONS_ST *params_functions = OPENSSL_zalloc(sizeof(PARAMS_FUNCTIONS_ST));
+	ERROR_FUNCTIONS_ST *error_functions = OPENSSL_zalloc(sizeof(ERROR_FUNCTIONS_ST));
+	if (!params_functions || !error_functions) {
+		goto err0;
+	}
+
 	init_error_functions(core_new_error, core_set_error_debug, core_vset_error);
 	init_get_params_functions(core_gettable_params, core_get_params);
 
@@ -215,11 +221,21 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *core_handle,
 	};
 
 	if (!core_get_params(core_handle, counter_request)) {
-		return 0;
+		goto err0;
 	}
 
-	if ((*provctx = provider_ctx_new(core_handle, pkcs11_module_path, pkcs11_init_args)) == NULL)
-		return 0;
+	if ((*provctx = provider_ctx_new(core_handle,
+									 params_functions,
+									 error_functions,
+									 pkcs11_module_path,
+									 pkcs11_init_args)) == NULL) {
+		goto err0;
+	}
 	*out = prov_fns;
 	return 1;
+
+err0:
+	OPENSSL_free(params_functions);
+	OPENSSL_free(error_functions);
+	return 0;
 }
