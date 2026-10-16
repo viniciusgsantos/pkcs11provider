@@ -29,13 +29,8 @@ static void *pkcs11_rsa_sig_newctx(void *provctx, const char *propq)
 static void pkcs11_rsa_sig_freectx(void *ctx)
 {
     PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	if (sigctx) {
-		if (sigctx->mdctx)
-			EVP_MD_CTX_free(sigctx->mdctx);
-		if (sigctx->digest_info)
-			OPENSSL_free(sigctx->digest_info);
+	if (sigctx)
 		OPENSSL_free(sigctx);
-	}
 }
 
 static void *pkcs11_rsa_sig_dupctx(void *ctx)
@@ -52,28 +47,8 @@ static void *pkcs11_rsa_sig_dupctx(void *ctx)
 		return NULL;
 	}
 	newctx->provctx = sigctx->provctx;
+	/* TODO Open new session? */
 	newctx->session_handle = sigctx->session_handle;
-	newctx->mdnid = sigctx->mdnid;
-	if (sigctx->mdctx) {
-		newctx->mdctx = EVP_MD_CTX_new();
-		if (!newctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return NULL;
-		}
-		if (!EVP_MD_CTX_copy_ex(newctx->mdctx, sigctx->mdctx)) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return NULL;
-		}
-	}
-	if (sigctx->digest_info) {
-		newctx->digest_info = OPENSSL_malloc(sigctx->digest_info_len);
-		if (!newctx->digest_info) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return NULL;
-		}
-		memcpy(newctx->digest_info, sigctx->digest_info, sigctx->digest_info_len);
-		newctx->digest_info_len = sigctx->digest_info_len;
-	}
 
 	return newctx;
 }
@@ -180,9 +155,7 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 		}
 	}
 
-	sigctx->mdnid = mdnid;
-
-	int mechanismId = 0;
+	int mechanismId;
 	switch (mdnid) {
 	case NID_md2:
 		mechanismId = CKM_MD2_RSA_PKCS;
@@ -205,35 +178,9 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 	case NID_sha512:
 		mechanismId = CKM_SHA512_RSA_PKCS;
 		break;
-	case NID_mdc2:
-	case NID_md4:
-	case NID_sm3:
-	case NID_sha224:
-	case NID_sha512_224:
-	case NID_sha512_256:
-		mechanismId = CKM_RSA_PKCS;
-		break;
-	}
-
-	if (mechanismId == 0) {
+	default:
 		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
 		return FALSE;	
-	}
-
-	if (mdnid == NID_mdc2 || mdnid == NID_md4 || mdnid == NID_sm3 || mdnid == NID_sha224 || mdnid == NID_sha512_224 ||
-			mdnid == NID_sha512_256) {
-		sigctx->mdctx = EVP_MD_CTX_new();
-		if (!sigctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return FALSE;
-		}
-		EVP_MD *md = EVP_MD_fetch(NULL, OBJ_nid2sn(mdnid), NULL);
-		if (!EVP_DigestInit(sigctx->mdctx, md)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			EVP_MD_free(md);
-			return FALSE;
-		}
-		EVP_MD_free(md);
 	}
 
 	CK_MECHANISM mechanism = {mechanismId, NULL, 0};
@@ -253,18 +200,11 @@ static int pkcs11_rsa_sig_digest_sign_update(void *ctx, const unsigned char *dat
 	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
 	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
 
-	if (sigctx->mdctx) {
-		if (!EVP_DigestUpdate(sigctx->mdctx, data, datalen)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			return FALSE;
-		}
-	} else {
-		unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
-		CK_RV rv = method->C_SignUpdate(sigctx->session_handle, data_tmp, datalen);
-		if (rv != CKR_OK) {
-			ERR_core_raise(handle, rv);
-			return FALSE;
-		}
+	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
+	CK_RV rv = method->C_SignUpdate(sigctx->session_handle, data_tmp, datalen);
+	if (rv != CKR_OK) {
+		ERR_core_raise(handle, rv);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -279,39 +219,10 @@ static int pkcs11_rsa_sig_digest_sign_final(void *ctx, unsigned char *sig, size_
 	int ret;
 
 	CK_ULONG ck_siglen = sig ? (CK_ULONG) *siglen : 0;
-	if (sigctx->mdctx) {
-
-		if (!sigctx->digest_info) {
-			unsigned char *digest_info = NULL;
-			size_t digest_info_len;
-
-			unsigned char md_value[EVP_MAX_MD_SIZE];
-			unsigned int md_len;
-			if (!EVP_DigestFinal_ex(sigctx->mdctx, md_value, &md_len)) {
-				ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-				return FALSE;
-			}
-
-			if ((ret = make_rsa_digest_info(md_value, md_len, sigctx->mdnid, &digest_info,
-					&digest_info_len)) != 0) {
-				ERR_core_raise(handle, ret);
-				return FALSE;
-			}
-			sigctx->digest_info = digest_info;
-			sigctx->digest_info_len = digest_info_len;
-		}
-		ret = method->C_Sign(sigctx->session_handle, sigctx->digest_info, sigctx->digest_info_len, sig, &ck_siglen);
-		if (ret != CKR_OK && (ret != CKR_BUFFER_TOO_SMALL || sig)) {
-			ERR_core_raise(handle, ret);
-			return FALSE;
-		}
-		*siglen = (size_t) ck_siglen;
-	} else {
-		ret = method->C_SignFinal(sigctx->session_handle, sig, &ck_siglen);
-		if (ret != CKR_OK && (ret != CKR_BUFFER_TOO_SMALL || sig)) {
-			ERR_core_raise(handle, ret);
-			return FALSE;
-		}
+	ret = method->C_SignFinal(sigctx->session_handle, sig, &ck_siglen);
+	if (ret != CKR_OK && (ret != CKR_BUFFER_TOO_SMALL || sig)) {
+		ERR_core_raise(handle, ret);
+		return FALSE;
 	}
 
 	if ((ret == CKR_OK || ret == CKR_BUFFER_TOO_SMALL) && !sig)
@@ -338,9 +249,7 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 		}
 	}
 
-	sigctx->mdnid = mdnid;
-
-	int mechanismId = 0;
+	int mechanismId;
 	switch (mdnid) {
 	case NID_md2:
 		mechanismId = CKM_MD2_RSA_PKCS;
@@ -363,35 +272,9 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 	case NID_sha512:
 		mechanismId = CKM_SHA512_RSA_PKCS;
 		break;
-	case NID_mdc2:
-	case NID_md4:
-	case NID_sm3:
-	case NID_sha224:
-	case NID_sha512_224:
-	case NID_sha512_256:
-		mechanismId = CKM_RSA_PKCS;
-		break;
-	}
-
-	if (mechanismId == 0) {
+	default:
 		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
-		return FALSE;	
-	}
-
-	if (mdnid == NID_mdc2 || mdnid == NID_md4 || mdnid == NID_sm3 ||mdnid == NID_sha224 || mdnid == NID_sha512_224 ||
-			mdnid == NID_sha512_256) {
-		sigctx->mdctx = EVP_MD_CTX_new();
-		if (!sigctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return FALSE;
-		}
-		EVP_MD *md = EVP_MD_fetch(NULL, OBJ_nid2sn(mdnid), NULL);
-		if (!EVP_DigestInit(sigctx->mdctx, md)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			EVP_MD_free(md);
-			return FALSE;
-		}
-		EVP_MD_free(md);
+		return FALSE;
 	}
 
 	CK_MECHANISM verify_mechanism = {mechanismId, NULL, 0};
@@ -411,18 +294,11 @@ static int pkcs11_rsa_sig_digest_verify_update(void *ctx, const unsigned char *d
 	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
 	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
 
-	if (sigctx->mdctx) {
-		if (!EVP_DigestUpdate(sigctx->mdctx, data, datalen)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			return FALSE;
-		}
-	} else {
-		unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
-		CK_RV rv = method->C_VerifyUpdate(sigctx->session_handle, data_tmp, datalen);
-		if (rv != CKR_OK) {
-			ERR_core_raise(handle, rv);
-			return FALSE;
-		}
+	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
+	CK_RV rv = method->C_VerifyUpdate(sigctx->session_handle, data_tmp, datalen);
+	if (rv != CKR_OK) {
+		ERR_core_raise(handle, rv);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -436,45 +312,11 @@ static int pkcs11_rsa_sig_digest_verify_final(void *ctx, const unsigned char *si
 
 	unsigned char *sig_tmp = (unsigned char *)(uintptr_t) sig;
 
-	int ret;
-
-	if (sigctx->mdctx) {
-
-		if (!sigctx->digest_info) {
-			unsigned char *digest_info = NULL;
-			size_t digest_info_len;
-
-			unsigned char md_value[EVP_MAX_MD_SIZE];
-			unsigned int md_len;
-			if (!EVP_DigestFinal_ex(sigctx->mdctx, md_value, &md_len)) {
-				ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-				return FALSE;
-			}
-	
-			if ((ret = make_rsa_digest_info(md_value, md_len, sigctx->mdnid, &digest_info,
-					&digest_info_len)) != 0) {
-				ERR_core_raise(handle, ret);
-				return FALSE;
-			}
-			sigctx->digest_info = digest_info;
-			sigctx->digest_info_len = digest_info_len;
-		}
-
-		CK_ULONG ck_siglen = (CK_ULONG) siglen;
-		ret = method->C_Verify(sigctx->session_handle, sigctx->digest_info, sigctx->digest_info_len,
-			sig_tmp, ck_siglen);
-		if (ret != CKR_OK) {
-			if (ret != CKR_SIGNATURE_INVALID)
-				ERR_core_raise(handle, ret);
-			return FALSE;
-		}
-	} else {
-		ret = method->C_VerifyFinal(sigctx->session_handle, sig_tmp, siglen);
-		if (ret != CKR_OK) {
-			if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
-				ERR_core_raise(handle, ret);
-			return FALSE;
-		}
+	int ret = method->C_VerifyFinal(sigctx->session_handle, sig_tmp, siglen);
+	if (ret != CKR_OK) {
+		if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
+			ERR_core_raise(handle, ret);
+		return FALSE;
 	}
 
 	return TRUE;

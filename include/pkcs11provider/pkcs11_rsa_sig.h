@@ -10,10 +10,6 @@
 struct pkcs11_rsa_sig_ctx_st {
 	struct pkcs11_prov_ctx_st *provctx;
 	CK_SESSION_HANDLE session_handle;
-	int mdnid;
-	EVP_MD_CTX *mdctx;
-	unsigned char *digest_info;
-	size_t digest_info_len;
 };
 
 typedef struct pkcs11_rsa_sig_ctx_st PKCS11_RSA_SIG_CTX;

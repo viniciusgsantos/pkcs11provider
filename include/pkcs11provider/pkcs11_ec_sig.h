@@ -12,10 +12,6 @@ struct pkcs11_ec_sig_ctx_st {
 	struct pkcs11_prov_ctx_st *provctx;
 	CK_SESSION_HANDLE session_handle;
 	size_t n_len;
-	EVP_MD_CTX *mdctx;
-	unsigned char digest[EVP_MAX_MD_SIZE];
-	size_t digest_len;
-	int has_digest;
 	size_t sig_len;
 };
 

@@ -25,11 +25,8 @@ static void *pkcs11_ec_sig_newctx(void *provctx, const char *propq)
 static void pkcs11_ec_sig_freectx(void *ctx)
 {
     PKCS11_EC_SIG_CTX *sigctx = (PKCS11_EC_SIG_CTX *) ctx;
-	if (sigctx) {
-		if (sigctx->mdctx)
-			EVP_MD_CTX_free(sigctx->mdctx);
+	if (sigctx)
 		OPENSSL_free(sigctx);
-	}
 }
 
 static void *pkcs11_ec_sig_dupctx(void *ctx)
@@ -47,25 +44,9 @@ static void *pkcs11_ec_sig_dupctx(void *ctx)
 	}
 
 	newctx->provctx = sigctx->provctx;
-	/* TODO abrir nova sessao? */
+	/* TODO Open new session? */
 	newctx->session_handle = sigctx->session_handle;
 	newctx->n_len = sigctx->n_len;
-	if (sigctx->mdctx) {
-		newctx->mdctx = EVP_MD_CTX_new();
-		if (!newctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return NULL;
-		}
-		if (!EVP_MD_CTX_copy_ex(newctx->mdctx, sigctx->mdctx)) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return NULL;
-		}
-	}
-	if (sigctx->has_digest) {
-		memcpy(newctx->digest, sigctx->digest, sigctx->digest_len);
-		newctx->digest_len = sigctx->digest_len;
-		newctx->has_digest = 1;
-	}
 	newctx->sig_len = sigctx->sig_len;
 
 	return newctx;
@@ -302,43 +283,14 @@ static int pkcs11_ec_sig_digest_sign_init(void *ctx, const char *mdname, void *p
 			ERR_core_raise(handle, UNKNOWN_MD_ALGORITHM);
 			return FALSE;	
 		}
-	}	
+	}
 
-	int mechanismId = 0;
-	switch (mdnid) {
-	case NID_sha1:
+	int mechanismId;
+	if (mdnid == NID_sha1) {
 		mechanismId = CKM_ECDSA_SHA1;
-		break;
-	case NID_sha224:
-	case NID_sha256:
-	case NID_sha384:
-	case NID_sha512:
-	case NID_sha3_224:
-	case NID_sha3_256:
-	case NID_sha3_384:
-	case NID_sha3_512:
-		mechanismId = CKM_ECDSA;
-		break;
-	}
-
-	if (mechanismId == 0) {
+	} else {
 		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
-		return FALSE;	
-	}
-
-	if (mdnid != NID_sha1) {
-		sigctx->mdctx = EVP_MD_CTX_new();
-		if (!sigctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return FALSE;
-		}
-		EVP_MD *md = EVP_MD_fetch(NULL, OBJ_nid2sn(mdnid), NULL);
-		if (!EVP_DigestInit(sigctx->mdctx, md)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			EVP_MD_free(md);
-			return FALSE;
-		}
-		EVP_MD_free(md);
+		return FALSE;
 	}
 
 	CK_MECHANISM mechanism = {mechanismId, NULL, 0};
@@ -358,18 +310,11 @@ static int pkcs11_ec_sig_digest_sign_update(void *ctx, const unsigned char *data
 	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
 	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
 
-	if (sigctx->mdctx) {
-		if (!EVP_DigestUpdate(sigctx->mdctx, data, datalen)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			return FALSE;
-		}
-	} else {
-		unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
-		CK_RV rv = method->C_SignUpdate(sigctx->session_handle, data_tmp, datalen);
-		if (rv != CKR_OK) {
-			ERR_core_raise(handle, rv);
-			return FALSE;
-		}
+	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
+	CK_RV rv = method->C_SignUpdate(sigctx->session_handle, data_tmp, datalen);
+	if (rv != CKR_OK) {
+		ERR_core_raise(handle, rv);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -392,29 +337,10 @@ static int pkcs11_ec_sig_digest_sign_final(void *ctx, unsigned char *sig, size_t
 
 	CK_RV rv;
 	CK_ULONG ck_siglen = sig ? (CK_ULONG) *siglen : 0;
-	if (sigctx->mdctx) {
-		if (!sigctx->has_digest) {
-			unsigned char md_value[EVP_MAX_MD_SIZE];
-			unsigned int md_len;
-			if (!EVP_DigestFinal(sigctx->mdctx, md_value, &md_len)) {
-				ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-				goto err1;
-			};
-			memcpy(sigctx->digest, md_value, md_len);
-			sigctx->digest_len = md_len;
-			sigctx->has_digest = 1;
-		}
-		rv = method->C_Sign(sigctx->session_handle, sigctx->digest, sigctx->digest_len, sig_tmp, &ck_siglen);
-		if (rv != CKR_OK && (rv != CKR_BUFFER_TOO_SMALL || sig_tmp)) {
-			ERR_core_raise(handle, rv);
-			goto err1;
-		}
-	} else {
-		rv = method->C_SignFinal(sigctx->session_handle, sig_tmp, &ck_siglen);
-		if (rv != CKR_OK && (rv != CKR_BUFFER_TOO_SMALL || sig_tmp)) {
-			ERR_core_raise(handle, rv);
-			goto err1;
-		}
+	rv = method->C_SignFinal(sigctx->session_handle, sig_tmp, &ck_siglen);
+	if (rv != CKR_OK && (rv != CKR_BUFFER_TOO_SMALL || sig_tmp)) {
+		ERR_core_raise(handle, rv);
+		goto err1;
 	}
 
 	if ((rv == CKR_OK || rv == CKR_BUFFER_TOO_SMALL) && !sig) {
@@ -492,41 +418,12 @@ static int pkcs11_ec_sig_digest_verify_init(void *ctx, const char *mdname, void 
 		}
 	}
 
-	int mechanismId = 0;
-	switch (mdnid) {
-	case NID_sha1:
+	int mechanismId;
+	if (mdnid == NID_sha1) {
 		mechanismId = CKM_ECDSA_SHA1;
-		break;
-	case NID_sha224:
-	case NID_sha256:
-	case NID_sha384:
-	case NID_sha512:
-	case NID_sha3_224:
-	case NID_sha3_256:
-	case NID_sha3_384:
-	case NID_sha3_512:
-		mechanismId = CKM_ECDSA;
-		break;
-	}
-
-	if (mechanismId == 0) {
+	} else {
 		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
 		return FALSE;	
-	}
-
-	if (mdnid != NID_sha1) {
-		sigctx->mdctx = EVP_MD_CTX_new();
-		if (!sigctx->mdctx) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
-			return FALSE;
-		}
-		EVP_MD *md = EVP_MD_fetch(NULL, OBJ_nid2sn(mdnid), NULL);
-		if (!EVP_DigestInit(sigctx->mdctx, md)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			EVP_MD_free(md);
-			return FALSE;
-		}
-		EVP_MD_free(md);
 	}
 
 	CK_MECHANISM mechanism = {mechanismId, NULL, 0};
@@ -546,18 +443,11 @@ static int pkcs11_ec_sig_digest_verify_update(void *ctx, const unsigned char *da
 	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
 	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
 
-	if (sigctx->mdctx) {
-		if (!EVP_DigestUpdate(sigctx->mdctx, data, datalen)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			return FALSE;
-		}
-	} else {
-		unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
-		CK_RV rv = method->C_VerifyUpdate(sigctx->session_handle, data_tmp, datalen);
-		if (rv != CKR_OK) {
-			ERR_core_raise(handle, rv);
-			return FALSE;
-		}
+	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
+	CK_RV rv = method->C_VerifyUpdate(sigctx->session_handle, data_tmp, datalen);
+	if (rv != CKR_OK) {
+		ERR_core_raise(handle, rv);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -600,27 +490,11 @@ static int pkcs11_ec_sig_digest_verify_final(void *ctx, const unsigned char *sig
 
 	int ret;
 
-	if (sigctx->mdctx) {
-		unsigned char md_value[EVP_MAX_MD_SIZE];
-		unsigned int md_len;
-		if (!EVP_DigestFinal_ex(sigctx->mdctx, md_value, &md_len)) {
-			ERR_core_raise(handle, MESSAGE_DIGEST_CALCULATION_ERROR);
-			return FALSE;
-		};
-
-		ret = method->C_Verify(sigctx->session_handle, md_value, md_len, raw_sig, raw_sig_len);
-		if (ret != CKR_OK) {
-			if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
-				ERR_core_raise(handle, ret);
-			return FALSE;
-		}
-	} else {
-		ret = method->C_VerifyFinal(sigctx->session_handle, raw_sig, raw_sig_len);
-		if (ret != CKR_OK) {
-			if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
-				ERR_core_raise(handle, ret);
-			return FALSE;
-		}
+	ret = method->C_VerifyFinal(sigctx->session_handle, raw_sig, raw_sig_len);
+	if (ret != CKR_OK) {
+		if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
+			ERR_core_raise(handle, ret);
+		return FALSE;
 	}
 
 	OPENSSL_free(raw_sig);
