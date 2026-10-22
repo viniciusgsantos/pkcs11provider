@@ -1,10 +1,6 @@
 cmake_minimum_required (VERSION 3.18)
 project (pkcs11provider)
 
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
-
 find_package(OpenSSL 3.0.0 REQUIRED)
 
 set(PROJECT_SOVERSION "0")
@@ -28,7 +24,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_link_libraries (${PROJECT_NAME}
     PRIVATE
-        OpenSSL::SSL
         OpenSSL::Crypto
         ${CMAKE_DL_LIBS}
 )
@@ -40,3 +35,17 @@ install(TARGETS ${PROJECT_NAME}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+cmake_policy(SET CMP0135 NEW)
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/063de7e9578f82b369302001269680b4b1553359.zip
+)
+
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+
+add_subdirectory(tests)
