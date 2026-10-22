@@ -39,8 +39,8 @@ struct pkcs11_prov_key_st {
 	int has_pub_key_handle;
 };
 
-typedef struct params_functions_st PARAMS_FUNCTIONS_ST;
-typedef struct error_functions_st ERROR_FUNCTIONS_ST;
+typedef struct params_functions_st PARAMS_FUNCTIONS;
+typedef struct error_functions_st ERROR_FUNCTIONS;
 typedef struct pkcs11_prov_ctx_st PKCS11_PROV_CTX;
 typedef struct pkcs11_prov_key_st PKCS11_PROV_KEY;
 

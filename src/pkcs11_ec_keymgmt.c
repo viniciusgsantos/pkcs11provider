@@ -39,9 +39,9 @@ static void pkcs11_ec_keymgmt_free(void *keydata)
 static void *pkcs11_ec_keymgmt_gen_init(void *provctx, int selection, const OSSL_PARAM *params)
 {
 	PKCS11_EC_KEYMGMT_GEN_CTX *genctx = OPENSSL_zalloc(sizeof(PKCS11_EC_KEYMGMT_GEN_CTX));
-	genctx->provctx = (PKCS11_PROV_CTX *) provctx;
-	CK_FUNCTION_LIST_PTR method = genctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = genctx->provctx->core_handle;
+	PKCS11_PROV_CTX *pctx = (PKCS11_PROV_CTX *) provctx;
+	genctx->provctx = pctx;
+	CK_FUNCTION_LIST_PTR method = pctx->method;
 
 	if (params) {
 		int i;
@@ -49,19 +49,19 @@ static void *pkcs11_ec_keymgmt_gen_init(void *provctx, int selection, const OSSL
 			if (strcmp(params[i].key, OSSL_PKEY_PARAM_GROUP_NAME) == 0) {
 				int curve_nid = curveName2nid((const char *) params[i].data);
 				if (curve_nid == NID_undef) {
-					ERR_core_raise(handle, UNKNOWN_CURVE_NAME);
+					ERR_core_raise(pctx, UNKNOWN_CURVE_NAME);
 					return FALSE;
 				}
 				genctx->curve_name = curveNid2Name(curve_nid);
 			} else if (strcmp(params[i].key, "slot-id") == 0) {
 				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
 				if (!slot_id_arg) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
 				if (PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &genctx->slot_id) != 0) {
-					ERR_core_raise(handle, SLOT_ID_PARSING_ERROR);
+					ERR_core_raise(pctx, SLOT_ID_PARSING_ERROR);
 					OPENSSL_free(slot_id_arg);
 					return FALSE;
 				}
@@ -69,14 +69,14 @@ static void *pkcs11_ec_keymgmt_gen_init(void *provctx, int selection, const OSSL
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				genctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!genctx->pin) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(genctx->pin, params[i].data, params[i].data_size + 1);
 			} else if (strcmp(params[i].key, "label") == 0) {
 				genctx->label = OPENSSL_malloc(params[i].data_size + 1);
 				if (!genctx->label) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(genctx->label, params[i].data, params[i].data_size + 1);
@@ -92,8 +92,8 @@ static void *pkcs11_ec_keymgmt_gen_init(void *provctx, int selection, const OSSL
 static int pkcs11_ec_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *params)
 {
 	PKCS11_EC_KEYMGMT_GEN_CTX *gctx = (PKCS11_EC_KEYMGMT_GEN_CTX *) genctx;
-	CK_FUNCTION_LIST_PTR method = gctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = gctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = gctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	if (params) {
 		int i;
@@ -101,19 +101,19 @@ static int pkcs11_ec_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *para
 			if (strcmp(params[i].key, OSSL_PKEY_PARAM_GROUP_NAME) == 0) {
 				int curve_nid = curveName2nid((const char *) params[i].data);
 				if (curve_nid == NID_undef) {
-					ERR_core_raise(handle, UNKNOWN_CURVE_NAME);
+					ERR_core_raise(provctx, UNKNOWN_CURVE_NAME);
 					return FALSE;
 				}
 				gctx->curve_name = curveNid2Name(curve_nid);
 			} else if (strcmp(params[i].key, "slot-id") == 0) {
 				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
 				if (!slot_id_arg) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
 				if (PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &gctx->slot_id) != 0) {
-					ERR_core_raise(handle, SLOT_ID_PARSING_ERROR);
+					ERR_core_raise(provctx, SLOT_ID_PARSING_ERROR);
 					OPENSSL_free(slot_id_arg);
 					return FALSE;
 				}
@@ -121,14 +121,14 @@ static int pkcs11_ec_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *para
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				gctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!gctx->pin) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(gctx->pin, params[i].data, params[i].data_size + 1);
 			} else if (strcmp(params[i].key, "label") == 0) {
 				gctx->label = OPENSSL_malloc(params[i].data_size + 1);
 				if (!gctx->label) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(gctx->label, params[i].data, params[i].data_size + 1);
@@ -160,7 +160,6 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	PKCS11_EC_KEYMGMT_GEN_CTX *gctx = (PKCS11_EC_KEYMGMT_GEN_CTX *) genctx;
 	PKCS11_PROV_CTX *provctx = gctx->provctx;
 	CK_FUNCTION_LIST_PTR method = provctx->method;
-	const OSSL_CORE_HANDLE *handle = gctx->provctx->core_handle;
 
 	CK_MECHANISM mechanism;
 	mechanism.mechanism = CKM_EC_KEY_PAIR_GEN;
@@ -190,7 +189,7 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	pub_key_template[i++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
 
 	if (!check_attributes_data(pub_key_template, i)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err4;
 	}
 
@@ -207,7 +206,7 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	priv_key_template[j++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
 
 	if (!check_attributes_data(priv_key_template, j)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err4;
 	}
 	
@@ -217,18 +216,18 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	
 	int ret;
 	if ((ret = open_session(provctx, gctx->slot_id, &session_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err4;
 	}
 
 	if((ret = user_login(provctx, gctx->pin)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
 	if ((ret = PKCS11_HELPER_gen_keypair(method, session_handle, &mechanism, pub_key_template, i,	
 			priv_key_template, j, &pub_key_handle, &priv_key_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
@@ -241,31 +240,31 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	const char *curve_name;
 
 	if ((ret = PKCS11_HELPER_get_public_ec_attributes(method, session_handle, pub_key_handle, &pub_x, &pub_y)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
 	if (gctx->extractable) {
 		if ((ret = PKCS11_HELPER_get_private_ec_attributes(method, session_handle, priv_key_handle, &priv)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err2;
 		}
 	}
 
 	if ((ret = PKCS11_HELPER_get_ec_curve_name(method, session_handle, pub_key_handle, &curve_name)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	}
 
 	PKCS11_EC_KEYDATA *keydata = OPENSSL_zalloc(sizeof(PKCS11_EC_KEYDATA));
 	if (!keydata) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 	keydata->provctx = gctx->provctx;
 	keydata->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 	if (!keydata->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	keydata->p11_handle->session_handle = session_handle;
@@ -314,21 +313,20 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 	
 	PKCS11_KEY_REFERENCE *key_reference = (PKCS11_KEY_REFERENCE *) reference;
 
-	CK_FUNCTION_LIST_PTR method = key_reference->provctx->method;
 	PKCS11_PROV_CTX *provctx = key_reference->provctx;
-	const OSSL_CORE_HANDLE *handle = provctx->core_handle;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	int ret;
 
 	PKCS11_EC_KEYDATA *keydata = OPENSSL_zalloc(sizeof(PKCS11_EC_KEYDATA));
 	if (!keydata) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err3;
 	}
 
 	keydata->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 		if (!keydata->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err2;
 	}
 
@@ -347,7 +345,7 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 
 	if ((ret = PKCS11_HELPER_get_public_ec_attributes(method, keydata->p11_handle->session_handle,
 			keydata->p11_handle->pub_key_handle, &pub_x, &pub_y)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	};
 
@@ -361,7 +359,7 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 
 	if ((ret = PKCS11_HELPER_get_obj_metadata(method, keydata->p11_handle->session_handle,
 			keydata->p11_handle->pub_key_handle, &keydata->label, NULL, NULL)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	};
 
@@ -370,7 +368,7 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 		CK_BBOOL sensitive;
 		if ((ret = PKCS11_HELPER_get_sensitive_attribute(method, keydata->p11_handle->session_handle,
 				keydata->p11_handle->priv_key_handle, &sensitive)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		};
 
@@ -378,7 +376,7 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 			BIGNUM *priv = NULL;
 			if ((ret = PKCS11_HELPER_get_private_ec_attributes(method, keydata->p11_handle->session_handle,
     				keydata->p11_handle->priv_key_handle, &priv)) != 0) {
-				ERR_core_raise(handle, ret);
+				ERR_core_raise(provctx, ret);
 				goto err0;
 			}
 
@@ -388,7 +386,7 @@ static void *pkcs11_ec_keymgmt_load(const void *reference, size_t reference_sz)
 
 	if ((ret = PKCS11_HELPER_get_ec_curve_name(method, keydata->p11_handle->session_handle,
 		default_handle, &curve_name)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	}
 
@@ -477,7 +475,6 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	PKCS11_EC_KEYDATA *key = (PKCS11_EC_KEYDATA *) keydata;
 	PKCS11_PROV_CTX *provctx = key->provctx;
 	CK_FUNCTION_LIST_PTR method = provctx->method;
-	const OSSL_CORE_HANDLE *handle = provctx->core_handle;
 	
 	BIGNUM *pub_x = NULL;
 	BIGNUM *pub_y = NULL;
@@ -503,14 +500,14 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
 		const OSSL_PARAM *priv_param = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_PRIV_KEY);
 		if (!priv_param) {
-			ERR_core_raise(handle, MISSING_PRIVATE_KEY_PARAMETER);
+			ERR_core_raise(provctx, MISSING_PRIVATE_KEY_PARAMETER);
 			goto err1;
 		}
 
 		priv = BN_bin2bn((unsigned char *) priv_param->data, priv_param->data_size, NULL);
 
 		if (!priv) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err1;
 		}
 	}
@@ -520,7 +517,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		const OSSL_PARAM *pub_y_param = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_EC_PUB_Y);
 
 		if (!pub_x_param || !pub_y_param) {
-			ERR_core_raise(handle, MISSING_PUBLIC_KEY_PARAMETER);
+			ERR_core_raise(provctx, MISSING_PUBLIC_KEY_PARAMETER);
 			goto err1;
 		}
 
@@ -528,7 +525,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		pub_y = BN_bin2bn((unsigned char *) pub_y_param->data, pub_y_param->data_size, NULL);
 
 		if (!pub_x || !pub_y) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err1;
 		}
 	}
@@ -537,13 +534,13 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		const OSSL_PARAM *group_name_param = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_GROUP_NAME);
 
 		if (!group_name_param) {
-			ERR_core_raise(handle, MISSING_KEY_DOMAIN_PARAMETER);
+			ERR_core_raise(provctx, MISSING_KEY_DOMAIN_PARAMETER);
 			goto err1;
 		}
 
 		curve_nid = curveName2nid(group_name_param[0].data);
 		if (curve_nid == NID_undef) {
-			ERR_core_raise(handle, UNKNOWN_CURVE_NAME);
+			ERR_core_raise(provctx, UNKNOWN_CURVE_NAME);
 			goto err1;
 		}
 		der_encoded_curve_oid_len = curveName2P11Curve(group_name_param[0].data, &der_encoded_curve_oid);
@@ -556,14 +553,14 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		const OSSL_PARAM *extractable_param = OSSL_PARAM_locate_const(params, "extractable");
 
 		if (!label_param || !slot_id_param || !pin_value_param) {
-			ERR_core_raise(handle, MISSING_KEY_OTHER_PARAMETER);
+			ERR_core_raise(provctx, MISSING_KEY_OTHER_PARAMETER);
 			goto err1;
 		}
 
 		label = label_param->data;
 
 		if((ret = PKCS11_HELPER_slot_label_to_id(method, slot_id_param->data, &slot_id)) != 0) {
-			ERR_core_raise(handle, INVALID_SLOT_ID);
+			ERR_core_raise(provctx, INVALID_SLOT_ID);
 			goto err1;
 		};
 
@@ -575,40 +572,40 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	}
 
 	if (!priv && (!pub_x || !pub_y)) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_INSUFFICIENT_KEY_MATERIAL);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_INSUFFICIENT_KEY_MATERIAL);
 		goto err1;
 	}
 
 	if (curve_nid == NID_undef) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_MISSING_CURVE_NAME);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_MISSING_CURVE_NAME);
 		goto err1;
 	}
 
 	if (!label) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_MISSING_LABEL);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_MISSING_LABEL);
 		goto err1;
 	}
 
 	if (!pin) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_MISSING_PIN);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_MISSING_PIN);
 		goto err1;
 	}
 
 	// We are logging in early to fail early in case of incorrect pin or slot id.
 	CK_SESSION_HANDLE session_handle;
 	if ((ret = open_session(provctx, slot_id, &session_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	}
 
 	if ((ret = user_login(provctx, pin)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 
 	ec_group = EC_GROUP_new_by_curve_name(curve_nid);
 	if (!ec_group) {
-		ERR_core_raise(handle, EC_CURVE_PARSING_ERROR);
+		ERR_core_raise(provctx, EC_CURVE_PARSING_ERROR);
 		goto err0;
 	}
 
@@ -618,7 +615,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		/* Derive public parameters from private key */
 		BN_CTX *bn_ctx = BN_CTX_new();
 		if (EC_POINT_mul(ec_group, ec_p, priv, NULL, NULL, bn_ctx) == 0) {
-			ERR_core_raise(handle, EC_PUBLIC_PARAMETERS_CALCULATION_ERROR);
+			ERR_core_raise(provctx, EC_PUBLIC_PARAMETERS_CALCULATION_ERROR);
 			BN_CTX_free(bn_ctx);
 			goto err0;
 		}
@@ -626,13 +623,13 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		pub_x = BN_new();
 		pub_y = BN_new();
 		if (!pub_x || !pub_y) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			BN_CTX_free(bn_ctx);
 			goto err0;
 		}
 
 		if (EC_POINT_get_affine_coordinates(ec_group, ec_p, pub_x, pub_y, bn_ctx) == 0) {
-			ERR_core_raise(handle, EC_PUBLIC_PARAMETERS_CALCULATION_ERROR);
+			ERR_core_raise(provctx, EC_PUBLIC_PARAMETERS_CALCULATION_ERROR);
 			BN_CTX_free(bn_ctx);
 			goto err0;
 		}
@@ -640,7 +637,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		BN_CTX_free(bn_ctx);
 	} else {
 		if (EC_POINT_set_affine_coordinates(ec_group, ec_p, pub_x, pub_y, NULL) == 0) {
-			ERR_core_raise(handle, EC_CURVE_PARSING_ERROR);
+			ERR_core_raise(provctx, EC_CURVE_PARSING_ERROR);
 			goto err0;
 		}
 	}
@@ -648,7 +645,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	size_t encoded_point_len = EC_POINT_point2oct(ec_group, ec_p, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
 	encoded_point = OPENSSL_malloc(encoded_point_len); 
 	if (!encoded_point) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	EC_POINT_point2oct(ec_group, ec_p, POINT_CONVERSION_UNCOMPRESSED, encoded_point, encoded_point_len, NULL);
@@ -674,7 +671,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	pub_key_template[i++] = makeUTF8Attribute(CKA_LABEL, label);
 
 	if (!check_attributes_data(pub_key_template, i)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 
@@ -686,12 +683,12 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 
 		unsigned char *priv_attr = OPENSSL_zalloc(n_len);
 		if (!priv_attr) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 
 		if (BN_bn2binpad(priv, priv_attr, n_len) <= 0) {
-			ERR_core_raise(handle, EC_PRIV_VALUE_PARSING_ERROR);
+			ERR_core_raise(provctx, EC_PRIV_VALUE_PARSING_ERROR);
 			OPENSSL_clear_free(priv_attr, n_len);
 			goto err0;
 		}
@@ -712,19 +709,19 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 		priv_key_template[j++] = makeUTF8Attribute(CKA_LABEL, label);
 
 		if (!check_attributes_data(priv_key_template, j)) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 	}
 
 	if ((ret = PKCS11_HELPER_create_object(method, session_handle, pub_key_template, i)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 	
 	if (has_priv_key) {
 		if ((ret = PKCS11_HELPER_create_object(method, session_handle, priv_key_template, j)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		}
 	}
@@ -734,19 +731,19 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 
 	if (has_priv_key) {
 		if ((ret = PKCS11_HELPER_get_private_key_handle(method, session_handle, label, &priv_key_handle)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		}
 	}
 	
 	if ((ret = PKCS11_HELPER_get_public_key_handle(method, session_handle, label, &pub_key_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 
 	key->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 	if (!key->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	key->p11_handle->session_handle = session_handle;
@@ -768,7 +765,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	key->extractable = extractable;
 	key->label = OPENSSL_zalloc(strlen(label) + 1);
 	if (!key->label) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	OPENSSL_strlcpy(key->label, label, strlen(label) + 1);
@@ -873,18 +870,18 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_import_types(int selection)
 static int pkcs11_ec_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK *param_cb, void *cbarg)
 {
 	PKCS11_EC_KEYDATA *key = (PKCS11_EC_KEYDATA *) keydata;
-	const OSSL_CORE_HANDLE *handle = key->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = key->provctx;
 
 	OSSL_PARAM_BLD *param_builder = OSSL_PARAM_BLD_new();
 	if (!param_builder) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 
 	if (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) {
 		if (key->priv) {
 			if(!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_PRIV_KEY, key->priv)) {
-				ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+				ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 				goto err1;
 			}
 		}
@@ -893,7 +890,7 @@ static int pkcs11_ec_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK 
 	if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
 		if (!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_EC_PUB_X, key->pub_x) ||
 			!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_EC_PUB_Y, key->pub_y)) {
-			ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+			ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 			goto err1;
 		}
 	}
@@ -901,7 +898,7 @@ static int pkcs11_ec_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK 
 	if (selection & OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS) {
 		if (!OSSL_PARAM_BLD_push_utf8_string(param_builder, OSSL_PKEY_PARAM_GROUP_NAME,
 				key->curve_name, strlen(key->curve_name))) {
-			ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+			ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 			goto err1;
 		}
 	}
@@ -909,19 +906,19 @@ static int pkcs11_ec_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK 
 	if (selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) {
 		if (!OSSL_PARAM_BLD_push_utf8_string(param_builder, "label", key->label, strlen(key->label)) ||
 			!OSSL_PARAM_BLD_push_int(param_builder, "extractable", key->extractable)) {
-			ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+			ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 			goto err1;
 		}
 	}
 
 	OSSL_PARAM *params = OSSL_PARAM_BLD_to_param(param_builder);
 	if (!params) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 
 	if (!param_cb(params, cbarg)) {
-		ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+		ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 		goto err0;
 	}
 

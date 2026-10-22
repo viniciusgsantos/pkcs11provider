@@ -17,7 +17,7 @@ static void *pkcs11_rsa_sig_newctx(void *provctx, const char *propq)
     PKCS11_RSA_SIG_CTX *ctx = OPENSSL_zalloc(sizeof(PKCS11_RSA_SIG_CTX));
 
 	if (!ctx) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 		return NULL;
 	}
 
@@ -36,14 +36,14 @@ static void pkcs11_rsa_sig_freectx(void *ctx)
 static void *pkcs11_rsa_sig_dupctx(void *ctx)
 {
     PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
 
 	if (!sigctx)
 		return NULL;
 
 	PKCS11_RSA_SIG_CTX *newctx = OPENSSL_zalloc(sizeof(PKCS11_RSA_SIG_CTX));
 	if (!newctx) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		return NULL;
 	}
 	newctx->provctx = sigctx->provctx;
@@ -57,8 +57,8 @@ static int pkcs11_rsa_sig_sign_init(void *ctx, void *provkey, const OSSL_PARAM *
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
 	PKCS11_RSA_KEYDATA *keydata = (PKCS11_RSA_KEYDATA *) provkey;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	sigctx->session_handle = keydata->p11_handle->session_handle;
 
@@ -66,7 +66,7 @@ static int pkcs11_rsa_sig_sign_init(void *ctx, void *provkey, const OSSL_PARAM *
 
 	CK_RV rv = method->C_SignInit(sigctx->session_handle, &mechanism, keydata->p11_handle->priv_key_handle);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -77,8 +77,8 @@ static int pkcs11_rsa_sig_sign(void *ctx, unsigned char *sig, size_t *siglen, si
 	const unsigned char *tbs, size_t tbslen)
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	unsigned char *tbs_tmp = (unsigned char *)(uintptr_t) tbs;
 
@@ -87,7 +87,7 @@ static int pkcs11_rsa_sig_sign(void *ctx, unsigned char *sig, size_t *siglen, si
 	CK_ULONG ck_siglen = sig ? (CK_ULONG) *siglen : 0;
 	CK_RV rv = method->C_Sign(sigctx->session_handle, tbs_tmp, tbslen, sig, &ck_siglen);
 	if (ret != CKR_OK && (rv != CKR_BUFFER_TOO_SMALL || sig)) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -101,8 +101,8 @@ static int pkcs11_rsa_sig_verify_init(void *ctx, void *provkey, const OSSL_PARAM
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
 	PKCS11_RSA_KEYDATA *keydata = (PKCS11_RSA_KEYDATA *) provkey;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	sigctx->session_handle = keydata->p11_handle->session_handle;
 
@@ -110,7 +110,7 @@ static int pkcs11_rsa_sig_verify_init(void *ctx, void *provkey, const OSSL_PARAM
 
 	CK_RV rv = method->C_VerifyInit(sigctx->session_handle, &mechanism, keydata->p11_handle->pub_key_handle);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -121,8 +121,8 @@ static int pkcs11_rsa_sig_verify(void *ctx, const unsigned char *sig, size_t sig
 	const unsigned char *tbs, size_t tbslen)
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	unsigned char *tbs_tmp = (unsigned char *)(uintptr_t) tbs;
 	unsigned char *sig_tmp = (unsigned char *)(uintptr_t) sig;
@@ -130,7 +130,7 @@ static int pkcs11_rsa_sig_verify(void *ctx, const unsigned char *sig, size_t sig
 	CK_RV rv = method->C_Verify(sigctx->session_handle, tbs_tmp, tbslen, sig_tmp, siglen);
 	if (rv != CKR_OK) {
 		if (rv != CKR_SIGNATURE_INVALID)
-			ERR_core_raise(handle, rv);
+			ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -141,8 +141,8 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
 	PKCS11_RSA_KEYDATA *keydata = (PKCS11_RSA_KEYDATA *) provkey;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	sigctx->session_handle = keydata->p11_handle->session_handle;
 
@@ -150,7 +150,7 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 	if (mdnid == NID_undef) {
 		mdnid = OBJ_ln2nid(mdname);
 		if (mdnid == NID_undef) {
-			ERR_core_raise(handle, UNKNOWN_MD_ALGORITHM);
+			ERR_core_raise(provctx, UNKNOWN_MD_ALGORITHM);
 			return FALSE;	
 		}
 	}
@@ -179,7 +179,7 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 		mechanismId = CKM_SHA512_RSA_PKCS;
 		break;
 	default:
-		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
+		ERR_core_raise(provctx, NO_MECHANISM_AVAILABLE);
 		return FALSE;	
 	}
 
@@ -187,7 +187,7 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 
 	CK_RV rv = method->C_SignInit(sigctx->session_handle, &mechanism, keydata->p11_handle->priv_key_handle);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -197,13 +197,13 @@ static int pkcs11_rsa_sig_digest_sign_init(void *ctx, const char *mdname, void *
 static int pkcs11_rsa_sig_digest_sign_update(void *ctx, const unsigned char *data, size_t datalen)
 {
     PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
 	CK_RV rv = method->C_SignUpdate(sigctx->session_handle, data_tmp, datalen);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -213,15 +213,15 @@ static int pkcs11_rsa_sig_digest_sign_update(void *ctx, const unsigned char *dat
 static int pkcs11_rsa_sig_digest_sign_final(void *ctx, unsigned char *sig, size_t *siglen, size_t sigsize)
 {
     PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	int ret;
 
 	CK_ULONG ck_siglen = sig ? (CK_ULONG) *siglen : 0;
 	ret = method->C_SignFinal(sigctx->session_handle, sig, &ck_siglen);
 	if (ret != CKR_OK && (ret != CKR_BUFFER_TOO_SMALL || sig)) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		return FALSE;
 	}
 
@@ -235,8 +235,8 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
 	PKCS11_RSA_KEYDATA *keydata = (PKCS11_RSA_KEYDATA *) provkey;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	sigctx->session_handle = keydata->p11_handle->session_handle;
 
@@ -244,7 +244,7 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 	if (mdnid == NID_undef) {
 		mdnid = OBJ_ln2nid(mdname);
 		if (mdnid == NID_undef) {
-			ERR_core_raise(handle, UNKNOWN_MD_ALGORITHM);
+			ERR_core_raise(provctx, UNKNOWN_MD_ALGORITHM);
 			return FALSE;	
 		}
 	}
@@ -273,7 +273,7 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 		mechanismId = CKM_SHA512_RSA_PKCS;
 		break;
 	default:
-		ERR_core_raise(handle, NO_MECHANISM_AVAILABLE);
+		ERR_core_raise(provctx, NO_MECHANISM_AVAILABLE);
 		return FALSE;
 	}
 
@@ -281,7 +281,7 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 
 	CK_RV rv = method->C_VerifyInit(sigctx->session_handle, &verify_mechanism, keydata->p11_handle->pub_key_handle);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -291,13 +291,13 @@ static int pkcs11_rsa_sig_digest_verify_init(void *ctx, const char *mdname, void
 static int pkcs11_rsa_sig_digest_verify_update(void *ctx, const unsigned char *data, size_t datalen)
 {
     PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	unsigned char *data_tmp = (unsigned char *)(uintptr_t) data;
 	CK_RV rv = method->C_VerifyUpdate(sigctx->session_handle, data_tmp, datalen);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(provctx, rv);
 		return FALSE;
 	}
 
@@ -307,15 +307,15 @@ static int pkcs11_rsa_sig_digest_verify_update(void *ctx, const unsigned char *d
 static int pkcs11_rsa_sig_digest_verify_final(void *ctx, const unsigned char *sig, size_t siglen)
 {
 	PKCS11_RSA_SIG_CTX *sigctx = (PKCS11_RSA_SIG_CTX *) ctx;
-	CK_FUNCTION_LIST_PTR method = sigctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = sigctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = sigctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	unsigned char *sig_tmp = (unsigned char *)(uintptr_t) sig;
 
 	int ret = method->C_VerifyFinal(sigctx->session_handle, sig_tmp, siglen);
 	if (ret != CKR_OK) {
 		if (ret != CKR_SIGNATURE_INVALID && ret != CKR_SIGNATURE_LEN_RANGE)
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 		return FALSE;
 	}
 

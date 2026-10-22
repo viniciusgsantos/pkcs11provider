@@ -15,8 +15,9 @@ static void *pkcs11_store_open(void *provctx, const char *uri)
 	PKCS11_PROV_CTX *pctx = (PKCS11_PROV_CTX *) provctx;
 	CK_FUNCTION_LIST_PTR method = pctx->method;
 	PKCS11_STOREMGMT_LOADER_CTX *loaderctx = OPENSSL_zalloc(sizeof(PKCS11_STOREMGMT_LOADER_CTX));
+	
 	if (!loaderctx) {
-		ERR_core_raise(pctx->core_handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 	loaderctx->provctx = provctx;
@@ -25,18 +26,18 @@ static void *pkcs11_store_open(void *provctx, const char *uri)
 	int ret;
 	if ((ret = PKCS11_HELPER_parse_uri_args(method, uri,
 			&loaderctx->slot_id, &loaderctx->pin, &loaderctx->alias)) != 0) {
-		ERR_core_raise(pctx->core_handle, ret);
+		ERR_core_raise(pctx, ret);
 		goto err1;
 	}
 
 	CK_SESSION_HANDLE session_handle;
 	if ((ret = open_session(pctx, loaderctx->slot_id, &session_handle)) != 0) {
-		ERR_core_raise(pctx->core_handle, ret);
+		ERR_core_raise(pctx, ret);
 		goto err1;
 	}
 
 	if((ret = user_login(pctx, loaderctx->pin)) != 0) {
-		ERR_core_raise(pctx->core_handle, ret);
+		ERR_core_raise(pctx, ret);
 		goto err0;
 	}
 	
@@ -49,7 +50,7 @@ err0:
 err1:
 	OPENSSL_free(loaderctx);
 	OPENSSL_clear_free(loaderctx->pin, strlen(loaderctx->pin) + 1); loaderctx->pin = NULL;
-	ERR_core_raise(pctx->core_handle, ret);
+	ERR_core_raise(pctx, ret);
 	return NULL;
 
 }
@@ -78,13 +79,13 @@ static int pkcs11_store_set_ctx_params(void *loaderctx, const OSSL_PARAM *params
 	return TRUE;
 }
 
+/* TODO refactor this huge function */
 static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *object_cbarg,
 	OSSL_PASSPHRASE_CALLBACK *pw_cb, void *pw_cbarg)
 {
 	PKCS11_STOREMGMT_LOADER_CTX *lctx = (PKCS11_STOREMGMT_LOADER_CTX *) loaderctx;
 	PKCS11_PROV_CTX *provctx = lctx->provctx;
 	CK_FUNCTION_LIST_PTR method = provctx->method;
-	const OSSL_CORE_HANDLE *handle = lctx->provctx->core_handle;
 
 	CK_OBJECT_HANDLE *obj_handles = NULL;
 	
@@ -92,7 +93,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 
 	if (!lctx->initialized) {
 		if ((ret = PKCS11_HELPER_find_obj_by_label_init(method, lctx->session_handle, lctx->alias)) != 0) {
-			ERR_core_raise(handle, ret);;
+			ERR_core_raise(provctx, ret);;
 			goto errinit2;
 		}
 		
@@ -101,7 +102,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 		
 		obj_handles = OPENSSL_malloc(capacity * sizeof(CK_OBJECT_HANDLE));
 		if (!obj_handles) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto errinit1;
 		}
 
@@ -111,7 +112,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 
 			if ((ret = PKCS11_HELPER_find_obj(method, lctx->session_handle,
 					&obj_handles[total_object_count], &returned)) != 0) {
-				ERR_core_raise(handle, ret);
+				ERR_core_raise(provctx, ret);
 				goto errinit0;
 			}
 
@@ -123,7 +124,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 			capacity *= 2;
 			CK_OBJECT_HANDLE *new_handles = OPENSSL_realloc(obj_handles, capacity * sizeof(CK_OBJECT_HANDLE));
 			if (!new_handles) {
-				ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+				ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 				goto errinit0;
 			}
 			obj_handles = new_handles;
@@ -136,7 +137,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 		if (total_object_count > 0) {
 			lctx->buffer = OPENSSL_malloc(sizeof(PKCS11_STOREMGMT_BUFFER_ENTRY) * total_object_count);
 			if (!lctx->buffer) {
-				ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+				ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 				goto errinit0;
 			}
 	
@@ -149,12 +150,12 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 					CK_OBJECT_CLASS obj_class;
 					if ((ret = PKCS11_HELPER_get_obj_metadata(method, lctx->session_handle, obj_handles[j],
 							&label, &id, &id_len)) != 0) {
-						ERR_core_raise(handle, ret);
+						ERR_core_raise(provctx, ret);
 						goto errinit0;
 					}
 					if ((ret = PKCS11_HELPER_get_obj_class(method, lctx->session_handle, obj_handles[j],
 							&obj_class)) != 0) {
-						ERR_core_raise(handle, ret);
+						ERR_core_raise(provctx, ret);
 						goto errinit0;
 					}
 					lctx->buffer[j].handle = obj_handles[j];
@@ -237,7 +238,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 
 		CK_SESSION_HANDLE session_handle;
 		if ((ret = open_session(provctx, lctx->slot_id, &session_handle)) != CKR_OK) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 
@@ -265,7 +266,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 		int cb_ret = object_cb(object_params, object_cbarg);
 
 		if (!cb_ret) {
-			ERR_core_raise(handle, STORE_OBJECT_CB_ERROR);
+			ERR_core_raise(provctx, STORE_OBJECT_CB_ERROR);
 			return FALSE;
 		}
 	} else {

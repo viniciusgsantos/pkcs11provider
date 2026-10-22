@@ -31,8 +31,8 @@ static void provider_ctx_free(PKCS11_PROV_CTX *ctx)
 	}
 }
 
-static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_FUNCTIONS_ST *params_functions,
-	ERROR_FUNCTIONS_ST *error_functions, const char *pkcs11_module_path, const char *pkcs11_init_args)
+static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_FUNCTIONS *params_functions,
+	ERROR_FUNCTIONS *error_functions, const char *pkcs11_module_path, const char *pkcs11_init_args)
 {
 	PKCS11_PROV_CTX *ctx = OPENSSL_malloc(sizeof(PKCS11_PROV_CTX));
 	if (!ctx)
@@ -41,6 +41,8 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_
 	ctx->core_handle = handle;
 	ctx->param_functions = params_functions;
 	ctx->error_functions = error_functions;
+
+	// We can only call ERR_core_raise after this point.
 
 	ctx->module_handler = NULL;
 
@@ -51,13 +53,13 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_
 	ctx->is_logged_in = 0;
 
 	if (pkcs11_module_path == NULL) {
-		ERR_core_raise(handle, PROVIDER_MISSING_PKCS11_MODULE_PATH);
+		ERR_core_raise(ctx, PROVIDER_MISSING_PKCS11_MODULE_PATH);
 		goto err0;
 	}
 	
 	ctx->module_path = OPENSSL_malloc(strlen(pkcs11_module_path) + 1);
 	if (!ctx->module_path) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(ctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	strcpy(ctx->module_path, pkcs11_module_path);
@@ -67,34 +69,34 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_
 	} else {
 		ctx->pkcs11_init_args = OPENSSL_malloc(strlen(pkcs11_init_args) + 1);
 		if (!ctx->pkcs11_init_args) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(ctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 		strcpy(ctx->pkcs11_init_args, pkcs11_init_args);
 	}
 
 	if ((ctx->module_handler = dlopen(ctx->module_path, RTLD_NOW)) == NULL) {
-		ERR_core_raise(handle, PROVIDER_PKCS11_LOAD_MODULE_ERROR);
+		ERR_core_raise(ctx, PROVIDER_PKCS11_LOAD_MODULE_ERROR);
 		goto err0;
 	}
 
 	CK_RV (*f_ptr)(CK_FUNCTION_LIST_PTR_PTR);
 
 	if ((f_ptr = (CK_RV (*)(CK_FUNCTION_LIST_PTR_PTR)) dlsym(ctx->module_handler, "C_GetFunctionList")) == NULL) {
-		ERR_core_raise(handle, PROVIDER_BAD_PKCS11_MODULE);
+		ERR_core_raise(ctx, PROVIDER_BAD_PKCS11_MODULE);
 		goto err0;
 	}
 
 	CK_RV rv = f_ptr(&ctx->method);
 	if (rv != CKR_OK) {
-		ERR_core_raise(handle, rv);
+		ERR_core_raise(ctx, rv);
 		goto err0;
 	}
 
 	int ret = PKCS11_HELPER_initialize(ctx->method, ctx->pkcs11_init_args);
 
 	if (ret != 0) {
-		ERR_core_raise(handle, PROVIDER_FAILED_TO_INITIALIZE_CRYPTOKI);
+		ERR_core_raise(ctx, PROVIDER_FAILED_TO_INITIALIZE_CRYPTOKI);
 		goto err0;
 	}
 
@@ -200,14 +202,18 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *core_handle,
 		}
 	}
 
-	PARAMS_FUNCTIONS_ST *params_functions = OPENSSL_zalloc(sizeof(PARAMS_FUNCTIONS_ST));
-	ERROR_FUNCTIONS_ST *error_functions = OPENSSL_zalloc(sizeof(ERROR_FUNCTIONS_ST));
+	PARAMS_FUNCTIONS *params_functions = OPENSSL_zalloc(sizeof(PARAMS_FUNCTIONS));
+	ERROR_FUNCTIONS *error_functions = OPENSSL_zalloc(sizeof(ERROR_FUNCTIONS));
 	if (!params_functions || !error_functions) {
 		goto err0;
 	}
 
-	init_error_functions(core_new_error, core_set_error_debug, core_vset_error);
-	init_get_params_functions(core_gettable_params, core_get_params);
+	params_functions->core_gettable_params = core_gettable_params;
+	params_functions->core_get_params = core_get_params;
+	
+	error_functions->core_new_error = core_new_error;
+	error_functions->core_set_error_debug = core_set_error_debug;
+	error_functions->core_vset_error = core_vset_error;
 
 	static char *pkcs11_module_path = NULL;
 	static char *pkcs11_init_args = NULL;

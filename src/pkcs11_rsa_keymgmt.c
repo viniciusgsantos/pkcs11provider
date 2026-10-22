@@ -44,9 +44,9 @@ static void pkcs11_rsa_keymgmt_free(void *keydata)
 static void *pkcs11_rsa_keymgmt_gen_init(void *provctx, int selection, const OSSL_PARAM *params)
 {
 	PKCS11_RSA_KEYMGMT_GEN_CTX *genctx = OPENSSL_zalloc(sizeof(PKCS11_RSA_KEYMGMT_GEN_CTX));
-	genctx->provctx = (PKCS11_PROV_CTX *) provctx;
-	CK_FUNCTION_LIST_PTR method = genctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = genctx->provctx->core_handle;
+	PKCS11_PROV_CTX *pctx = (PKCS11_PROV_CTX *) provctx;
+	genctx->provctx = pctx;
+	CK_FUNCTION_LIST_PTR method = pctx->method;
 
 	if (params) {
 		int i;
@@ -58,25 +58,25 @@ static void *pkcs11_rsa_keymgmt_gen_init(void *provctx, int selection, const OSS
 			} else if (strcmp(params[i].key, "slot-id") == 0) {
 				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
 				if (!slot_id_arg) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
 				if (!PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &genctx->slot_id)) {
-					ERR_core_raise(handle, SLOT_ID_PARSING_ERROR);
+					ERR_core_raise(pctx, SLOT_ID_PARSING_ERROR);
 					return FALSE;
 				}
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				genctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!genctx->pin) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(genctx->pin, params[i].data, params[i].data_size + 1);
 			} else if (strcmp(params[i].key, "label") == 0) {
 				genctx->label = OPENSSL_malloc(params[i].data_size + 1);
 				if (!genctx->label) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(genctx->label, params[i].data, params[i].data_size + 1);
@@ -94,8 +94,8 @@ static void *pkcs11_rsa_keymgmt_gen_init(void *provctx, int selection, const OSS
 static int pkcs11_rsa_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *params)
 {
 	PKCS11_RSA_KEYMGMT_GEN_CTX *gctx = (PKCS11_RSA_KEYMGMT_GEN_CTX *) genctx;
-	CK_FUNCTION_LIST_PTR method = gctx->provctx->method;
-	const OSSL_CORE_HANDLE *handle = gctx->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = gctx->provctx;
+	CK_FUNCTION_LIST_PTR method = provctx->method;
 
 	if (params) {
 		int i;
@@ -107,12 +107,12 @@ static int pkcs11_rsa_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *par
 			} else if (strcmp(params[i].key, "slot-id") == 0) {
 				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
 				if (!slot_id_arg) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
 				if (PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &gctx->slot_id) != 0) {
-					ERR_core_raise(handle, SLOT_ID_PARSING_ERROR);
+					ERR_core_raise(provctx, SLOT_ID_PARSING_ERROR);
 					OPENSSL_free(slot_id_arg);
 					return FALSE;
 				}
@@ -120,14 +120,14 @@ static int pkcs11_rsa_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *par
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				gctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!gctx->pin) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(gctx->pin, params[i].data, params[i].data_size + 1);
 			} else if (strcmp(params[i].key, "label") == 0) {
 				gctx->label = OPENSSL_malloc(params[i].data_size + 1);
 				if (!gctx->label) {
-					ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 					return FALSE;
 				}
 				OPENSSL_strlcpy(gctx->label, params[i].data, params[i].data_size + 1);
@@ -164,7 +164,6 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 	PKCS11_RSA_KEYMGMT_GEN_CTX *gctx = (PKCS11_RSA_KEYMGMT_GEN_CTX *) genctx;
 	PKCS11_PROV_CTX *provctx = gctx->provctx;
 	CK_FUNCTION_LIST_PTR method = provctx->method;
-	const OSSL_CORE_HANDLE *handle = gctx->provctx->core_handle;
 
 	CK_MECHANISM mechanism;
 	mechanism.mechanism = gctx->x9_31 ? CKM_RSA_X9_31_KEY_PAIR_GEN : CKM_RSA_PKCS_KEY_PAIR_GEN;
@@ -208,7 +207,7 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 	pub_key_template[i++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
 
 	if (!check_attributes_data(pub_key_template, i)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err4;
 	}
 
@@ -225,7 +224,7 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 	priv_key_template[j++] = makeUTF8Attribute(CKA_LABEL, gctx->label);
 
 	if (!check_attributes_data(priv_key_template, j)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err4;
 	}
 	
@@ -235,18 +234,18 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 
 	int ret;
 	if ((ret = open_session(provctx, gctx->slot_id, &session_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err4;
 	}
 
 	if ((ret = user_login(provctx, gctx->pin)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
 	if ((ret = PKCS11_HELPER_gen_keypair(method, session_handle, &mechanism, pub_key_template, i,
 			priv_key_template, j, &pub_key_handle, &priv_key_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
@@ -263,27 +262,27 @@ static void *pkcs11_rsa_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg
 	BIGNUM *iqmp = NULL;
 
 	if ((ret = PKCS11_HELPER_get_public_rsa_attributes(method, session_handle, pub_key_handle, &n, &e)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err3;
 	}
 
 	if (gctx->extractable) {
 		if ((ret = PKCS11_HELPER_get_private_rsa_attributes(method, session_handle, priv_key_handle, &d, &p,
 				&q, &dmp1, &dmq1, &iqmp)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err2;
 		};
 	}
 
 	PKCS11_RSA_KEYDATA *keydata = OPENSSL_zalloc(sizeof(PKCS11_RSA_KEYDATA));
 	if (!keydata) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 	keydata->provctx = gctx->provctx;
 	keydata->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 	if (!keydata->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	keydata->p11_handle->session_handle = session_handle;
@@ -347,13 +346,13 @@ static void *pkcs11_rsa_keymgmt_load(const void *reference, size_t reference_sz)
 
 	PKCS11_RSA_KEYDATA *keydata = OPENSSL_zalloc(sizeof(PKCS11_RSA_KEYDATA));
 	if (!keydata) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err3;
 	}
 
 	keydata->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 		if (!keydata->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err2;
 	}
 
@@ -376,7 +375,7 @@ static void *pkcs11_rsa_keymgmt_load(const void *reference, size_t reference_sz)
 
 	if ((ret = PKCS11_HELPER_get_public_rsa_attributes(method, keydata->p11_handle->session_handle,
 			default_handle, &n, &e)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	};
 
@@ -385,7 +384,7 @@ static void *pkcs11_rsa_keymgmt_load(const void *reference, size_t reference_sz)
 	
 	if ((ret = PKCS11_HELPER_get_obj_metadata(method, keydata->p11_handle->session_handle,
 			default_handle, &keydata->label, NULL, NULL)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	};
 
@@ -394,7 +393,7 @@ static void *pkcs11_rsa_keymgmt_load(const void *reference, size_t reference_sz)
 		CK_BBOOL sensitive;
 		if ((ret = PKCS11_HELPER_get_sensitive_attribute(method, keydata->p11_handle->session_handle,
 				keydata->p11_handle->priv_key_handle, &sensitive)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		};
 
@@ -408,7 +407,7 @@ static void *pkcs11_rsa_keymgmt_load(const void *reference, size_t reference_sz)
 
 			if ((ret = PKCS11_HELPER_get_private_rsa_attributes(method, keydata->p11_handle->session_handle,
     				keydata->p11_handle->priv_key_handle, &d, &p, &q, &dmp1, &dmq1, &iqmp)) != 0) {
-				ERR_core_raise(handle, ret);
+				ERR_core_raise(provctx, ret);
 				goto err0;
 			}
 
@@ -497,7 +496,6 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	PKCS11_RSA_KEYDATA *key = (PKCS11_RSA_KEYDATA *) keydata;
 	PKCS11_PROV_CTX *provctx = key->provctx;
 	CK_FUNCTION_LIST_PTR method = provctx->method;
-	const OSSL_CORE_HANDLE *handle = key->provctx->core_handle;
 		
 	BIGNUM *n = NULL;
 	BIGNUM *e = NULL;
@@ -535,7 +533,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 
 
 		if (!d_param || !p_param || !q_param) {
-			ERR_core_raise(handle, MISSING_PRIVATE_KEY_PARAMETER);
+			ERR_core_raise(provctx, MISSING_PRIVATE_KEY_PARAMETER);
 			goto err1;
 		}
 
@@ -544,28 +542,28 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		q = BN_bin2bn((unsigned char *) q_param->data, q_param->data_size, NULL);
 
 		if (!d || !p || !q) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err1;
 		}
 		
 		if (dmp1_param) {
 			dmp1 = BN_bin2bn((unsigned char *) dmp1_param->data, dmp1_param->data_size, NULL);
 			if (!dmp1) {
-				ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+				ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 				goto err1;
 			}
 		}
 		if (dmq1_param) {
 			dmq1 = BN_bin2bn((unsigned char *) dmq1_param->data, dmq1_param->data_size, NULL);
 			if (!dmq1) {
-				ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+				ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 				goto err1;
 			}
 		}
 		if (iqmp_param) {
 			iqmp = BN_bin2bn((unsigned char *) iqmp_param->data, iqmp_param->data_size, NULL);
 			if (!iqmp) {
-				ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+				ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 				goto err1;
 			}
 		}
@@ -576,7 +574,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		const OSSL_PARAM *e_param = OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_RSA_E);
 
 		if (!n_param || !e_param) {
-			ERR_core_raise(handle, MISSING_PUBLIC_KEY_PARAMETER);
+			ERR_core_raise(provctx, MISSING_PUBLIC_KEY_PARAMETER);
 			goto err1;
 		}
 
@@ -584,7 +582,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		e = BN_bin2bn((unsigned char *) e_param->data, e_param->data_size, NULL);
 
 		if (!n || !e) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err1;
 		}
 	}
@@ -596,14 +594,14 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		const OSSL_PARAM *extractable_param = OSSL_PARAM_locate_const(params, "extractable");
 
 		if (!label_param || !slot_id_param || !pin_value_param) {
-			ERR_core_raise(handle, MISSING_KEY_OTHER_PARAMETER);
+			ERR_core_raise(provctx, MISSING_KEY_OTHER_PARAMETER);
 			goto err1;
 		}
 
 		label = label_param->data;
 
 		if((ret = PKCS11_HELPER_slot_label_to_id(method, slot_id_param->data, &slot_id)) != 0) {
-			ERR_core_raise(handle, INVALID_SLOT_ID);
+			ERR_core_raise(provctx, INVALID_SLOT_ID);
 			goto err1;
 		};
 
@@ -615,28 +613,28 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	}
 
 	if ((!d || !p || !q) && (!n || !e)) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_INSUFFICIENT_KEY_MATERIAL);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_INSUFFICIENT_KEY_MATERIAL);
 		goto err1;
 	}
 
 	if (!label) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_MISSING_LABEL);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_MISSING_LABEL);
 		goto err1;
 	}
 
 	if (!pin) {
-		ERR_core_raise(handle, IMPORT_KEY_ERROR_MISSING_PIN);
+		ERR_core_raise(provctx, IMPORT_KEY_ERROR_MISSING_PIN);
 		goto err1;
 	}
 
 	CK_SESSION_HANDLE session_handle;
 	if ((ret = open_session(provctx, slot_id, &session_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err1;
 	}
 
 	if ((ret = user_login(provctx, pin)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 
@@ -645,7 +643,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 
 		if (!n && !e) {
 			if ((ret = calculate_rsa_public_parameters(bn_ctx, d, p, q, &n, &e)) != 0){
-				ERR_core_raise(handle, ret);
+				ERR_core_raise(provctx, ret);
 				BN_CTX_free(bn_ctx);
 				goto err0;
 			}
@@ -653,7 +651,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		
 		if (!dmp1 && !dmq1 && !iqmp && d && p && q) {
 			if ((ret = calculate_rsa_crt_parameters(bn_ctx, d, p, q, &dmp1, &dmq1, &iqmp)) != 0) {
-				ERR_core_raise(handle, ret);
+				ERR_core_raise(provctx, ret);
 				BN_CTX_free(bn_ctx);
 				goto err0;
 			}
@@ -669,7 +667,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	e_bytes = OPENSSL_malloc(e_bytes_len);
 
 	if (!padded_n || !e_bytes) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 
@@ -692,7 +690,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	pub_key_template[i++] = makeUTF8Attribute(CKA_LABEL, label);
 
 	if (!check_attributes_data(pub_key_template, i)) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 
@@ -708,7 +706,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		padded_iqmp = OPENSSL_malloc(n_len / 2);
 
 		if (!padded_d || !padded_p || !padded_q || !padded_dmp1 || !padded_dmq1 || !padded_iqmp) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 
@@ -740,19 +738,19 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 		priv_key_template[j++] = makeUTF8Attribute(CKA_LABEL, label);
 
 		if (!check_attributes_data(priv_key_template, j)) {
-			ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
 	}
 
 	if ((ret = PKCS11_HELPER_create_object(method, session_handle, pub_key_template, i)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 	
 	if (has_priv_key) {
 		if ((ret = PKCS11_HELPER_create_object(method, session_handle, priv_key_template, j)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		}
 	}
@@ -763,19 +761,19 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	/* We prefer the private handle because the private key contain both public and private info */
 	if (has_priv_key) {
 		if ((ret = PKCS11_HELPER_get_private_key_handle(method, session_handle, label, &priv_key_handle)) != 0) {
-			ERR_core_raise(handle, ret);
+			ERR_core_raise(provctx, ret);
 			goto err0;
 		}
 	}
 	
 	if ((ret = PKCS11_HELPER_get_public_key_handle(method, session_handle, label, &pub_key_handle)) != 0) {
-		ERR_core_raise(handle, ret);
+		ERR_core_raise(provctx, ret);
 		goto err0;
 	}
 
 	key->p11_handle = OPENSSL_zalloc(sizeof(PKCS11_PROV_KEY));
 	if (!key->p11_handle) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	key->p11_handle->session_handle = session_handle;
@@ -806,7 +804,7 @@ static int pkcs11_rsa_keymgmt_import(void *keydata, int selection, const OSSL_PA
 	key->extractable = extractable;
 	key->label = OPENSSL_zalloc(strlen(label) + 1);
 	if (!key->label) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
 	OPENSSL_strlcpy(key->label, label, strlen(label) + 1);
@@ -932,11 +930,11 @@ static const OSSL_PARAM *pkcs11_rsa_keymgmt_import_types(int selection)
 static int pkcs11_rsa_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK *param_cb, void *cbarg)
 {
 	PKCS11_RSA_KEYDATA *key = (PKCS11_RSA_KEYDATA *) keydata;
-	const OSSL_CORE_HANDLE *handle = key->provctx->core_handle;
+	PKCS11_PROV_CTX *provctx = key->provctx;
 
 	OSSL_PARAM_BLD *param_builder = OSSL_PARAM_BLD_new();
 	if (!param_builder) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 
@@ -948,7 +946,7 @@ static int pkcs11_rsa_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK
 				!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT1, key->dmp1) ||
 				!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT2, key->dmq1) ||
 				!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_COEFFICIENT1, key->iqmp)) {
-				ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+				ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 				goto err1;
 			}
 		}
@@ -957,7 +955,7 @@ static int pkcs11_rsa_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK
 	if (selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) {
 		if (!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_N, key->n) ||
 			!OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_E, key->e)) {
-			ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+			ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 			goto err1;
 		}
 	}
@@ -965,19 +963,19 @@ static int pkcs11_rsa_keymgmt_export(void *keydata, int selection, OSSL_CALLBACK
 	if (selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) {
 		if (!OSSL_PARAM_BLD_push_utf8_string(param_builder, "label", key->label, strlen(key->label)) ||
 			!OSSL_PARAM_BLD_push_int(param_builder, "extractable", key->extractable)) {
-			ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+			ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 			goto err1;
 		}
 	}
 
 	OSSL_PARAM *params = OSSL_PARAM_BLD_to_param(param_builder);
 	if (!params) {
-		ERR_core_raise(handle, MEMORY_ALLOCATION_ERROR);
+		ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 		goto err1;
 	}
 
 	if (!param_cb(params, cbarg)) {
-		ERR_core_raise(handle, KEY_PARAMETER_EXPORTATION_ERROR);
+		ERR_core_raise(provctx, KEY_PARAMETER_EXPORTATION_ERROR);
 		goto err0;
 	}
 
