@@ -13,22 +13,21 @@ Dependencies:
 * [openssl-libs](https://www.openssl.org/) - version 3.0 or greater
 * [openssl-devel](https://www.openssl.org/) - version 3.0 or greater
 
-To build on *nix as release run:
+Testing dependencies:
+* [GoogleTest](https://github.com/google/googletest)
+* [SoftHSMv2](https://github.com/softhsm/SoftHSMv2) - Tested with 2.7.0, but likely to work with older versions too.
+
+To configure as release run:
 ```sh
-cmake -S . -Bbuild -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" -DCMAKE_C_FLAGS=-fPIC
-cmake --build build --target all
+cmake -S . -Bbuild -DCMAKE_BUILD_TYPE=Release
 ```
 
-To build on *nix as debug run:  
+To configure as debug run:  
 ```sh
-cmake -S . -Bbuild -DCMAKE_BUILD_TYPE=Debug -G "Unix Makefiles" -DCMAKE_C_FLAGS=-fPIC
-cmake --build build --target all
+cmake -S . -Bbuild -DCMAKE_BUILD_TYPE=Debug
 ```
 
-If you have more than one version of OpenSSL installed, pass the `OPENSSL_ROOT_DIR` cmake variable pointing to the root installation. F. ex., if you 
-want to use the version installed in `/usr/local`:
+To build run:
 ```sh
-cmake -S . -Bbuild -DOPENSSL_ROOT_DIR=/usr/local ...
+cmake --build build --target [all|pkcs11provider|all_tests]
 ```
-
-If you want to configure for a place other than `/usr/local/` add `-DCMAKE_INSTALL_PREFIX=<your desired location>` to `cmake` command.  
