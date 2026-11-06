@@ -31,7 +31,7 @@ static void *pkcs11_store_open(void *provctx, const char *uri)
 	}
 
 	CK_SESSION_HANDLE session_handle;
-	if ((ret = open_session(pctx, loaderctx->slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(pctx, &session_handle)) != 0) {
 		ERR_core_raise(pctx, ret);
 		goto err1;
 	}
@@ -237,7 +237,7 @@ static int pkcs11_store_load(void *loaderctx, OSSL_CALLBACK *object_cb, void *ob
 		memset(&key_reference, '\0', sizeof(PKCS11_KEY_REFERENCE));
 
 		CK_SESSION_HANDLE session_handle;
-		if ((ret = open_session(provctx, lctx->slot_id, &session_handle)) != CKR_OK) {
+		if ((ret = open_session(provctx, &session_handle)) != CKR_OK) {
 			ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}

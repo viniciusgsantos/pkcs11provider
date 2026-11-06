@@ -15,6 +15,7 @@ int PKCS11_HELPER_initialize(CK_FUNCTION_LIST_PTR method, const char *init_args)
 	CK_RV rv;
 	int locking = 0;
 
+	// TODO we must create a CK_C_INITIALIZE_ARGS from init_args.
 	rv = method->C_Initialize(NULL_PTR);
 
 	if (rv == CKR_CRYPTOKI_ALREADY_INITIALIZED) {
@@ -726,7 +727,7 @@ int PKCS11_HELPER_find_token(CK_FUNCTION_LIST_PTR method, const char *tokenLabel
 		goto err0;
 	}
 
-	slotPtr = (CK_SLOT_ID_PTR) malloc(sizeof(CK_SLOT_ID) * pulCount);
+	slotPtr = (CK_SLOT_ID_PTR) OPENSSL_malloc(sizeof(CK_SLOT_ID) * pulCount);
 	rv = method->C_GetSlotList(CK_TRUE, slotPtr, &pulCount);
 	if (rv != CKR_OK){
 		goto err1;
@@ -737,15 +738,15 @@ int PKCS11_HELPER_find_token(CK_FUNCTION_LIST_PTR method, const char *tokenLabel
 		if (rv != CKR_OK){
 			goto err1;
 		}
-		if (memcmp(tokenInfo.label, tokenLabel, 32) == 0){
+		if (strlen(tokenLabel) <= 32 && memcmp(tokenInfo.label, tokenLabel, strlen(tokenLabel)) == 0) {
 			*slotFound = slotPtr[i];
 			found = TRUE;
 			break;
 		}
 	}
-	if (!found){
-		return 1;
-	}
+
+	if (!found)
+		return SLOT_LABEL_NOT_FOUND;
 
 	free(slotPtr);
 	return 0;
@@ -881,7 +882,7 @@ int PKCS11_HELPER_parse_uri_args(CK_FUNCTION_LIST_PTR method, const char *uri, C
 int PKCS11_HELPER_slot_label_to_id(CK_FUNCTION_LIST_PTR method, const char *slot_label, CK_SLOT_ID *slot_id)
 {
 	if (!is_valid_int(slot_label)) {
-		// proprably the slot is a label, not an ID.
+		// probably the slot is a label, not an ID.
 		// find the appropriate ID
 		char slot_padded[33];
 		sprintf(slot_padded, "%-32s", slot_label);

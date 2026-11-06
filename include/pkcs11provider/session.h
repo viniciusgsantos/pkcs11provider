@@ -9,12 +9,12 @@
 #include "pkcs11provider/pkcs11/pkcs11.h"
 #include "pkcs11provider/pkcs11_types.h"
 
-int open_session(PKCS11_PROV_CTX *provctx, const CK_SLOT_ID slot_id, CK_SESSION_HANDLE *session_handle);
+int open_session(PKCS11_PROV_CTX *provctx, CK_SESSION_HANDLE *session_handle);
 int close_session(PKCS11_PROV_CTX *provctx, CK_SESSION_HANDLE session_handle);
 int user_login(PKCS11_PROV_CTX *provctx, const char *user_pin);
 int user_logout(PKCS11_PROV_CTX *provctx);
 
-static int open_anchor_session(PKCS11_PROV_CTX *provctx, const CK_SLOT_ID slot_id);
+static int open_anchor_session(PKCS11_PROV_CTX *provctx);
 
 static int PKCS11_open_session(CK_FUNCTION_LIST_PTR method, const CK_SLOT_ID slot_id, CK_SESSION_HANDLE *session_handle);
 static int PKCS11_close_session(CK_FUNCTION_LIST_PTR method, CK_SESSION_HANDLE session_handle);

@@ -53,19 +53,6 @@ static void *pkcs11_ec_keymgmt_gen_init(void *provctx, int selection, const OSSL
 					return FALSE;
 				}
 				genctx->curve_name = curveNid2Name(curve_nid);
-			} else if (strcmp(params[i].key, "slot-id") == 0) {
-				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
-				if (!slot_id_arg) {
-					ERR_core_raise(pctx, MEMORY_ALLOCATION_ERROR);
-					return FALSE;
-				}
-				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
-				if (PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &genctx->slot_id) != 0) {
-					ERR_core_raise(pctx, SLOT_ID_PARSING_ERROR);
-					OPENSSL_free(slot_id_arg);
-					return FALSE;
-				}
-				OPENSSL_free(slot_id_arg);
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				genctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!genctx->pin) {
@@ -105,19 +92,6 @@ static int pkcs11_ec_keymgmt_gen_set_params(void *genctx, const OSSL_PARAM *para
 					return FALSE;
 				}
 				gctx->curve_name = curveNid2Name(curve_nid);
-			} else if (strcmp(params[i].key, "slot-id") == 0) {
-				unsigned char *slot_id_arg = OPENSSL_malloc(params[i].data_size + 1);
-				if (!slot_id_arg) {
-					ERR_core_raise(provctx, MEMORY_ALLOCATION_ERROR);
-					return FALSE;
-				}
-				OPENSSL_strlcpy(slot_id_arg, params[i].data, params[i].data_size + 1);
-				if (PKCS11_HELPER_slot_label_to_id(method, slot_id_arg, &gctx->slot_id) != 0) {
-					ERR_core_raise(provctx, SLOT_ID_PARSING_ERROR);
-					OPENSSL_free(slot_id_arg);
-					return FALSE;
-				}
-				OPENSSL_free(slot_id_arg);
 			} else if (strcmp(params[i].key, "pin-value") == 0) {
 				gctx->pin = OPENSSL_malloc(params[i].data_size + 1);
 				if (!gctx->pin) {
@@ -145,7 +119,6 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_gen_settable_params(void *genctx, voi
 {
 	static const OSSL_PARAM gen_settable_params[] = {
 		OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
-		OSSL_PARAM_utf8_string("slot-id", NULL, 0),
 		OSSL_PARAM_utf8_string("pin-value", NULL, 0),
 		OSSL_PARAM_utf8_string("label", NULL, 0),
 		OSSL_PARAM_int("extractable", NULL),
@@ -215,7 +188,7 @@ static void *pkcs11_ec_keymgmt_gen(void *genctx, OSSL_CALLBACK *cb, void *cbarg)
 	CK_OBJECT_HANDLE priv_key_handle;
 	
 	int ret;
-	if ((ret = open_session(provctx, gctx->slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(provctx, &session_handle)) != 0) {
 		ERR_core_raise(provctx, ret);
 		goto err4;
 	}
@@ -491,7 +464,6 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 	unsigned char *der_encoded_point = NULL;
 	int curve_nid;
 	const char *label = NULL;
-	CK_SLOT_ID slot_id;
 	int extractable = FALSE;
 	const char *pin = NULL;
 
@@ -548,21 +520,15 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 
 	if (selection & OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS) {
 		const OSSL_PARAM *label_param = OSSL_PARAM_locate_const(params, "label");
-		const OSSL_PARAM *slot_id_param = OSSL_PARAM_locate_const(params, "slot-id");
 		const OSSL_PARAM *pin_value_param = OSSL_PARAM_locate_const(params, "pin-value");
 		const OSSL_PARAM *extractable_param = OSSL_PARAM_locate_const(params, "extractable");
 
-		if (!label_param || !slot_id_param || !pin_value_param) {
+		if (!label_param || !pin_value_param) {
 			ERR_core_raise(provctx, MISSING_KEY_OTHER_PARAMETER);
 			goto err1;
 		}
 
 		label = label_param->data;
-
-		if((ret = PKCS11_HELPER_slot_label_to_id(method, slot_id_param->data, &slot_id)) != 0) {
-			ERR_core_raise(provctx, INVALID_SLOT_ID);
-			goto err1;
-		};
 
 		pin = pin_value_param->data;
 
@@ -593,7 +559,7 @@ static int pkcs11_ec_keymgmt_import(void *keydata, int selection, const OSSL_PAR
 
 	// We are logging in early to fail early in case of incorrect pin or slot id.
 	CK_SESSION_HANDLE session_handle;
-	if ((ret = open_session(provctx, slot_id, &session_handle)) != 0) {
+	if ((ret = open_session(provctx, &session_handle)) != 0) {
 		ERR_core_raise(provctx, ret);
 		goto err1;
 	}
@@ -817,7 +783,6 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_import_types(int selection)
 	static const OSSL_PARAM other_params[] = {
 		OSSL_PARAM_utf8_string("label", NULL, 0),
 		OSSL_PARAM_utf8_string("pin-value", NULL, 0),
-		OSSL_PARAM_utf8_string("slot-id", NULL, 0),
 		OSSL_PARAM_int("extractable", NULL),
 		OSSL_PARAM_END
 	};
@@ -825,7 +790,6 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_import_types(int selection)
 		OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
 		OSSL_PARAM_utf8_string("label", NULL, 0),
 		OSSL_PARAM_utf8_string("pin-value", NULL, 0),
-		OSSL_PARAM_utf8_string("slot-id", NULL, 0),
 		OSSL_PARAM_int("extractable", NULL),
 		OSSL_PARAM_END
 	};
@@ -843,7 +807,6 @@ static const OSSL_PARAM *pkcs11_ec_keymgmt_import_types(int selection)
 		OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, NULL, 0),
 		OSSL_PARAM_utf8_string("label", NULL, 0),
 		OSSL_PARAM_utf8_string("pin-value", NULL, 0),
-		OSSL_PARAM_utf8_string("slot-id", NULL, 0),
 		OSSL_PARAM_int("extractable", NULL),
 		OSSL_PARAM_END
 	};

@@ -4,14 +4,14 @@
 
 #include <string.h>
 
-int open_session(PKCS11_PROV_CTX *provctx, const CK_SLOT_ID slot_id, CK_SESSION_HANDLE *session_handle)
+int open_session(PKCS11_PROV_CTX *provctx, CK_SESSION_HANDLE *session_handle)
 {
     CK_RV rv;
 
     if (!provctx->has_anchor_session)
-        open_anchor_session(provctx, slot_id);
+        open_anchor_session(provctx);
     
-    if ((rv = PKCS11_open_session(provctx->method, slot_id, session_handle)) != 0) {
+    if ((rv = PKCS11_open_session(provctx->method, provctx->slot_id, session_handle)) != 0) {
         return rv;
     }
 
@@ -63,11 +63,11 @@ int user_logout(PKCS11_PROV_CTX *provctx)
     return 0;
 }
 
-static int open_anchor_session(PKCS11_PROV_CTX *provctx, const CK_SLOT_ID slot_id)
+static int open_anchor_session(PKCS11_PROV_CTX *provctx)
 {
     if (!provctx->has_anchor_session) {
         CK_RV rv;
-        if ((rv = PKCS11_open_session(provctx->method, slot_id, &provctx->anchor_session)) != 0) {
+        if ((rv = PKCS11_open_session(provctx->method, provctx->slot_id, &provctx->anchor_session)) != 0) {
 			return rv;
         }
 

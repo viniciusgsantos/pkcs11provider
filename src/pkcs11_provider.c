@@ -32,7 +32,7 @@ static void provider_ctx_free(PKCS11_PROV_CTX *ctx)
 }
 
 static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_FUNCTIONS *params_functions,
-	ERROR_FUNCTIONS *error_functions, const char *pkcs11_module_path, const char *pkcs11_init_args)
+	 									 ERROR_FUNCTIONS *error_functions, const OSSL_PARAM *params)
 {
 	PKCS11_PROV_CTX *ctx = OPENSSL_malloc(sizeof(PKCS11_PROV_CTX));
 	if (!ctx)
@@ -41,38 +41,36 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_
 	ctx->core_handle = handle;
 	ctx->param_functions = params_functions;
 	ctx->error_functions = error_functions;
-
-	// We can only call ERR_core_raise after this point.
-
 	ctx->module_handler = NULL;
-
 	ctx->module_path = NULL;
 	ctx->pkcs11_init_args = NULL;
-
 	ctx->has_anchor_session = 0;
 	ctx->is_logged_in = 0;
 
-	if (pkcs11_module_path == NULL) {
+	const OSSL_PARAM *pkcs11_module_path_param = OSSL_PARAM_locate_const(params, "pkcs11-module-path");
+	const OSSL_PARAM *pkcs11_init_args_param = OSSL_PARAM_locate_const(params, "pkcs11-init-args");
+	const OSSL_PARAM *slot_id_param = OSSL_PARAM_locate_const(params, "slot-id");
+	const OSSL_PARAM *slot_label_param = OSSL_PARAM_locate_const(params, "slot-label");
+
+	if (pkcs11_module_path_param == NULL || pkcs11_module_path_param->return_size == 0) {
 		ERR_core_raise(ctx, PROVIDER_MISSING_PKCS11_MODULE_PATH);
 		goto err0;
 	}
 	
-	ctx->module_path = OPENSSL_malloc(strlen(pkcs11_module_path) + 1);
+	ctx->module_path = OPENSSL_malloc(pkcs11_module_path_param->return_size + 1);
 	if (!ctx->module_path) {
 		ERR_core_raise(ctx, MEMORY_ALLOCATION_ERROR);
 		goto err0;
 	}
-	strcpy(ctx->module_path, pkcs11_module_path);
+	strcpy(ctx->module_path, *(char **) pkcs11_module_path_param->data);
 	
-	if (pkcs11_init_args == NULL) {
-		ctx->pkcs11_init_args = NULL;
-	} else {
-		ctx->pkcs11_init_args = OPENSSL_malloc(strlen(pkcs11_init_args) + 1);
+	if (pkcs11_init_args_param != NULL && pkcs11_init_args_param->return_size != 0) {
+		ctx->pkcs11_init_args = OPENSSL_malloc(pkcs11_init_args_param->return_size + 1);
 		if (!ctx->pkcs11_init_args) {
 			ERR_core_raise(ctx, MEMORY_ALLOCATION_ERROR);
 			goto err0;
 		}
-		strcpy(ctx->pkcs11_init_args, pkcs11_init_args);
+		strcpy(ctx->pkcs11_init_args, *(char **) pkcs11_init_args_param->data);
 	}
 
 	if ((ctx->module_handler = dlopen(ctx->module_path, RTLD_NOW)) == NULL) {
@@ -97,6 +95,25 @@ static PKCS11_PROV_CTX *provider_ctx_new(const OSSL_CORE_HANDLE *handle, PARAMS_
 
 	if (ret != 0) {
 		ERR_core_raise(ctx, PROVIDER_FAILED_TO_INITIALIZE_CRYPTOKI);
+		goto err0;
+	}
+
+	if (slot_id_param != NULL && slot_id_param->return_size != 0) {
+		char *end;
+		long slot_id = strtol(*(char **) slot_id_param->data, &end, 0);
+		if (*(char **) slot_id_param->data == end) {
+			ERR_core_raise(ctx, SLOT_ID_PARSING_ERROR);
+			goto err0;
+		}
+		ctx->slot_id = slot_id;
+	} else if (slot_label_param != NULL && slot_label_param->return_size != 0) {
+		rv = PKCS11_HELPER_find_token(ctx->method, *(char **) slot_label_param->data, &ctx->slot_id);
+		if (rv != CKR_OK) {
+			ERR_core_raise(ctx, rv);
+			goto err0;
+		}
+	} else {
+		ERR_core_raise(ctx, PROVIDER_MISSING_PKCS11_SLOT_ID);
 		goto err0;
 	}
 
@@ -215,14 +232,16 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *core_handle,
 	error_functions->core_set_error_debug = core_set_error_debug;
 	error_functions->core_vset_error = core_vset_error;
 
-	static char *pkcs11_module_path = NULL;
-	static char *pkcs11_init_args = NULL;
+	char *pkcs11_module_path = NULL;
+	char *pkcs11_init_args = NULL;
+	char* slot_id;
+	char *slot_label;
 
-	static OSSL_PARAM counter_request[] = {
-		{ "pkcs11-module-path", OSSL_PARAM_UTF8_PTR,
-			&pkcs11_module_path, sizeof(&pkcs11_module_path), 0 },
-		{ "pkcs11-init-args", OSSL_PARAM_UTF8_PTR,
-			&pkcs11_init_args, sizeof(&pkcs11_init_args), 0 },
+	OSSL_PARAM counter_request[] = {
+		{ "pkcs11-module-path", OSSL_PARAM_UTF8_PTR, &pkcs11_module_path, 0, 0 },
+		{ "pkcs11-init-args", OSSL_PARAM_UTF8_PTR, &pkcs11_init_args, 0, 0 },
+		{ "slot-id", OSSL_PARAM_UTF8_PTR, &slot_id, sizeof(unsigned int), 0 },
+		{ "slot-label", OSSL_PARAM_UTF8_PTR, &slot_label, 0, 0 },
 		OSSL_PARAM_END
 	};
 
@@ -230,11 +249,7 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *core_handle,
 		goto err0;
 	}
 
-	if ((*provctx = provider_ctx_new(core_handle,
-									 params_functions,
-									 error_functions,
-									 pkcs11_module_path,
-									 pkcs11_init_args)) == NULL) {
+	if ((*provctx = provider_ctx_new(core_handle, params_functions, error_functions, counter_request)) == NULL) {
 		goto err0;
 	}
 	*out = prov_fns;

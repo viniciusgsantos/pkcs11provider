@@ -24,6 +24,7 @@ struct pkcs11_prov_ctx_st {
 	void *module_handler;
 	char *module_path;
 	char *pkcs11_init_args;
+	CK_SLOT_ID slot_id;
 	CK_SESSION_HANDLE anchor_session;
 	int has_anchor_session;
 	int is_logged_in;
